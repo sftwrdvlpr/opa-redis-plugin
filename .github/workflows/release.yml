@@ -33,12 +33,12 @@ jobs:
         run: |
           GOOS=${{ matrix.os }}
           GOARCH=${{ matrix.arch }}
-          BIN=dist/opa_redis_${{ matrix.os }}_${{ matrix.arch }}
           mkdir -p dist
           make build
+          mv opa_redis_${{ matrix.os }}_${{ matrix.arch }} ./dist
 
       - name: List
-        run: ls -lh ./
+        run: ls -lh ./dist
 
       - name: Upload binary
         uses: actions/upload-artifact@v5
