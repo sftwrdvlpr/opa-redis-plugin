@@ -8,9 +8,9 @@ package presentation
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,15 +18,15 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/cover"
-	"github.com/open-policy-agent/opa/format"
-	"github.com/open-policy-agent/opa/loader"
-	"github.com/open-policy-agent/opa/metrics"
-	"github.com/open-policy-agent/opa/profiler"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/cover"
+	"github.com/open-policy-agent/opa/v1/format"
+	"github.com/open-policy-agent/opa/v1/loader"
+	"github.com/open-policy-agent/opa/v1/metrics"
+	"github.com/open-policy-agent/opa/v1/profiler"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown"
 )
 
 // DefaultProfileSortOrder is the default ordering unless something is specified in the CLI
@@ -52,10 +52,7 @@ func (o DepAnalysisOutput) Pretty(w io.Writer) error {
 
 	// Fill two columns if results have base and virtual docs. Else fill one column.
 	if len(o.Base) > 0 && len(o.Virtual) > 0 {
-		maxLen := len(o.Base)
-		if len(o.Virtual) > maxLen {
-			maxLen = len(o.Virtual)
-		}
+		maxLen := max(len(o.Virtual), len(o.Base))
 		headers = []string{"Base Documents", "Virtual Documents"}
 		rows = make([][]string, maxLen)
 		for i := range rows {
@@ -113,7 +110,7 @@ type Output struct {
 	Result            rego.ResultSet                 `json:"result,omitempty"`
 	Partial           *rego.PartialQueries           `json:"partial,omitempty"`
 	Metrics           metrics.Metrics                `json:"metrics,omitempty"`
-	AggregatedMetrics map[string]interface{}         `json:"aggregated_metrics,omitempty"`
+	AggregatedMetrics map[string]any                 `json:"aggregated_metrics,omitempty"`
 	Explanation       []*topdown.Event               `json:"explanation,omitempty"`
 	Profile           []profiler.ExprStats           `json:"profile,omitempty"`
 	AggregatedProfile []profiler.ExprStatsAggregated `json:"aggregated_profile,omitempty"`
@@ -235,7 +232,7 @@ type OutputError struct {
 	Message  string        `json:"message"`
 	Code     string        `json:"code,omitempty"`
 	Location *ast.Location `json:"location,omitempty"`
-	Details  interface{}   `json:"details,omitempty"`
+	Details  any           `json:"details,omitempty"`
 	err      error
 }
 
@@ -244,16 +241,16 @@ func (j OutputError) Error() string {
 }
 
 // JSON writes x to w with indentation.
-func JSON(w io.Writer, x interface{}) error {
+func JSON(w io.Writer, x any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(x)
 }
 
-// Bindings prints the bindings from r to w.
-func Bindings(w io.Writer, r Output) error {
+// Bindings prints the bindings from r to w, errors are written to errW
+func Bindings(w io.Writer, errW io.Writer, r Output) error {
 	if r.Errors != nil {
-		return prettyError(w, r.Errors)
+		return prettyError(errW, r.Errors)
 	}
 	for _, rs := range r.Result {
 		if err := JSON(w, rs.Bindings); err != nil {
@@ -263,32 +260,45 @@ func Bindings(w io.Writer, r Output) error {
 	return nil
 }
 
-// Values prints the values from r to w.
-func Values(w io.Writer, r Output) error {
+// Values prints the values from r to w, errors are written to errW
+func Values(w io.Writer, errW io.Writer, r Output) error {
 	if r.Errors != nil {
-		return prettyError(w, r.Errors)
+		return prettyError(errW, r.Errors)
 	}
 	for _, rs := range r.Result {
-		line := make([]interface{}, len(rs.Expressions))
+		line := make([]any, len(rs.Expressions))
 		for i := range line {
 			line[i] = rs.Expressions[i].Value
 		}
-		if err := JSON(os.Stdout, line); err != nil {
+		if err := JSON(w, line); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Pretty prints all of r to w in a human-readable format.
-func Pretty(w io.Writer, r Output) error {
+// Pretty prints all of r to w in a human-readable format, errors are written to errW
+func Pretty(w io.Writer, errW io.Writer, r Output) error {
+	return PrettyWithOptions(w, errW, r, PrettyOptions{
+		TraceOpts: topdown.PrettyTraceOptions{
+			Locations: true,
+		},
+	})
+}
+
+type PrettyOptions struct {
+	TraceOpts topdown.PrettyTraceOptions
+}
+
+// PrettyWithOptions prints all of r to w in a human-readable format, errors are written to errW
+func PrettyWithOptions(w io.Writer, errW io.Writer, r Output, opts PrettyOptions) error {
 	if len(r.Explanation) > 0 {
-		if err := prettyExplanation(w, r.Explanation); err != nil {
+		if err := prettyExplanation(w, r.Explanation, opts.TraceOpts); err != nil {
 			return err
 		}
 	}
 	if r.Errors != nil {
-		if err := prettyError(w, r.Errors); err != nil {
+		if err := prettyError(errW, r.Errors); err != nil {
 			return err
 		}
 	} else if r.undefined() {
@@ -331,11 +341,11 @@ func Pretty(w io.Writer, r Output) error {
 }
 
 // Source prints partial evaluation results in r to w in a source file friendly
-// format.
-func Source(w io.Writer, r Output) error {
+// format, errors are written to errW
+func Source(w io.Writer, errW io.Writer, r Output) error {
 
 	if r.Errors != nil {
-		return prettyError(w, r.Errors)
+		return prettyError(errW, r.Errors)
 	}
 
 	for i := range r.Partial.Queries {
@@ -349,7 +359,7 @@ func Source(w io.Writer, r Output) error {
 
 	for i := range r.Partial.Support {
 		fmt.Fprintf(w, "# Module %d\n", i+1)
-		bs, err := format.AstWithOpts(r.Partial.Support[i], format.Opts{IgnoreLocations: true})
+		bs, err := format.AstWithOpts(r.Partial.Support[i], format.Opts{IgnoreLocations: true, RegoVersion: r.Partial.Support[i].RegoVersion()})
 		if err != nil {
 			return err
 		}
@@ -359,13 +369,13 @@ func Source(w io.Writer, r Output) error {
 	return nil
 }
 
-// Raw prints the values from r to w.  Each result is written on a separate
+// Raw prints the values from r to w, errors are written to errW. Each result is written on a separate
 // line, and the expressions are separated by spaces.  If the values are
 // strings, they are written directly rather than formatted as compact
 // JSON strings.  This output format makes OPA useful in a scripting context.
-func Raw(w io.Writer, r Output) error {
+func Raw(w io.Writer, errW io.Writer, r Output) error {
 	if r.Errors != nil {
-		return prettyError(w, r.Errors)
+		return prettyError(errW, r.Errors)
 	}
 
 	for _, rs := range r.Result {
@@ -392,18 +402,18 @@ func Raw(w io.Writer, r Output) error {
 	return nil
 }
 
-func Discard(w io.Writer, x interface{}) error {
+func Discard(w io.Writer, x any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	field, ok := x.(Output)
 	if !ok {
-		return fmt.Errorf("error in converting interface to type Output")
+		return errors.New("error in converting interface to type Output")
 	}
 	bs, err := json.Marshal(field)
 	if err != nil {
 		return err
 	}
-	var rawData map[string]interface{}
+	var rawData map[string]any
 	err = json.Unmarshal(bs, &rawData)
 	if err != nil {
 		return err
@@ -444,25 +454,25 @@ func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
 	var maxWidth int
 
 	for i := range pq.Queries {
-		s, width, err := prettyASTNode(pq.Queries[i])
+		f, width, err := prettyASTNode(pq.Queries[i], ast.DefaultRegoVersion)
 		if err != nil {
 			return err
 		}
 		if width > maxWidth {
 			maxWidth = width
 		}
-		table.Append([]string{fmt.Sprintf("Query %d", i+1), s})
+		table.Append([]string{fmt.Sprintf("Query %d", i+1), f})
 	}
 
-	for i := range pq.Support {
-		s, width, err := prettyASTNode(pq.Support[i])
+	for i, s := range pq.Support {
+		f, width, err := prettyASTNode(s, s.RegoVersion())
 		if err != nil {
 			return err
 		}
 		if width > maxWidth {
 			maxWidth = width
 		}
-		table.Append([]string{fmt.Sprintf("Support %d", i+1), s})
+		table.Append([]string{fmt.Sprintf("Support %d", i+1), f})
 	}
 
 	table.SetColMinWidth(1, maxWidth)
@@ -472,13 +482,13 @@ func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
 }
 
 // prettyASTNode is used for pretty-printing the result of partial eval
-func prettyASTNode(x interface{}) (string, int, error) {
-	bs, err := format.AstWithOpts(x, format.Opts{IgnoreLocations: true})
+func prettyASTNode(x any, regoVersion ast.RegoVersion) (string, int, error) {
+	bs, err := format.AstWithOpts(x, format.Opts{IgnoreLocations: true, RegoVersion: regoVersion})
 	if err != nil {
 		return "", 0, fmt.Errorf("format error: %w", err)
 	}
 	var maxLineWidth int
-	s := strings.Trim(strings.Replace(string(bs), "\t", "  ", -1), "\n")
+	s := strings.Trim(strings.ReplaceAll(string(bs), "\t", "  "), "\n")
 	for _, line := range strings.Split(s, "\n") {
 		width := tablewriter.DisplayWidth(line)
 		if width > maxLineWidth {
@@ -499,7 +509,7 @@ func prettyMetrics(w io.Writer, m metrics.Metrics, limit int) error {
 
 var statKeys = []string{"min", "max", "mean", "90%", "99%"}
 
-func prettyAggregatedMetrics(w io.Writer, ms map[string]interface{}, limit int) error {
+func prettyAggregatedMetrics(w io.Writer, ms map[string]any, limit int) error {
 	keys := []string{"metric"}
 	tableMetrics := generateTableWithKeys(w, append(keys, statKeys...)...)
 	populateTableAggregatedMetrics(ms, tableMetrics, limit)
@@ -534,7 +544,7 @@ func prettyAggregatedProfile(w io.Writer, profile []profiler.ExprStatsAggregated
 	for _, rs := range profile {
 		line := []string{}
 		for _, k := range statKeys {
-			v := rs.ExprTimeNsStats.(map[string]interface{})[k]
+			v := rs.ExprTimeNsStats.(map[string]any)[k]
 			if f, ok := v.(float64); ok {
 				line = append(line, time.Duration(f).String())
 			} else if i, ok := v.(int64); ok {
@@ -554,8 +564,8 @@ func prettyAggregatedProfile(w io.Writer, profile []profiler.ExprStatsAggregated
 	return nil
 }
 
-func prettyExplanation(w io.Writer, explanation []*topdown.Event) error {
-	topdown.PrettyTraceWithLocation(w, explanation)
+func prettyExplanation(w io.Writer, explanation []*topdown.Event, opts topdown.PrettyTraceOptions) error {
+	topdown.PrettyTraceWithOpts(w, explanation, opts)
 	return nil
 }
 
@@ -635,7 +645,7 @@ func generateTableProfile(writer io.Writer) *tablewriter.Table {
 func populateTableMetrics(m metrics.Metrics, table *tablewriter.Table, prettyLimit int) {
 	lines := [][]string{}
 	for varName, varValueInterface := range m.All() {
-		val, ok := varValueInterface.(map[string]interface{})
+		val, ok := varValueInterface.(map[string]any)
 		if !ok {
 			line := []string{}
 			varValue := checkStrLimit(fmt.Sprintf("%v", varValueInterface), prettyLimit)
@@ -655,11 +665,11 @@ func populateTableMetrics(m metrics.Metrics, table *tablewriter.Table, prettyLim
 	table.AppendBulk(lines)
 }
 
-func populateTableAggregatedMetrics(ms map[string]interface{}, table *tablewriter.Table, prettyLimit int) {
+func populateTableAggregatedMetrics(ms map[string]any, table *tablewriter.Table, prettyLimit int) {
 	lines := [][]string{}
 	for name, vals := range ms {
 		line := []string{name}
-		vs := vals.(map[string]interface{})
+		vs := vals.(map[string]any)
 		for _, k := range statKeys {
 			line = append(line, checkStrLimit(fmt.Sprintf("%v", vs[k]), prettyLimit))
 		}
@@ -698,7 +708,7 @@ func (rk resultKey) string() string {
 	return rk.exprText
 }
 
-func (rk resultKey) selectVarValue(result rego.Result) interface{} {
+func (rk resultKey) selectVarValue(result rego.Result) any {
 	if rk.varName != "" {
 		return result.Bindings[rk.varName]
 	}
