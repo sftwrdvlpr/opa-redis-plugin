@@ -37,7 +37,7 @@ jobs:
           mkdir -p dist
           make build
           mv opa_redis_${{ matrix.os }}_${{ matrix.arch }} ./dist
-          ls -lh ./opa_redis_*
+          ls -lh ./
 
       - name: List
         run: ls -lh ./dist
