@@ -37,6 +37,9 @@ jobs:
           mkdir -p dist
           make build
 
+      - name: List
+        run: ls -lh ./
+
       - name: Upload binary
         uses: actions/upload-artifact@v5
         with:
