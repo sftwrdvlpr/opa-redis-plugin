@@ -59,7 +59,7 @@ jobs:
           tag_name: ${{ github.event.inputs.TAG_VERSION }}
           name: Release ${{ github.event.inputs.TAG_VERSION }}
           files: |
-            dist/**/opa_redis_*
+            dist/opa_redis_*
 
 
 
