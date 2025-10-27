@@ -31,10 +31,10 @@ jobs:
       
       - name: Build
         run: |
-          GOOS=${{ matrix.os }}
-          GOARCH=${{ matrix.arch }}
-          mkdir -p dist
-          make build
+          GOOS=${{ matrix.os }} \
+          GOARCH=${{ matrix.arch }} \
+          mkdir -p dist \
+          make build \
           mv opa_redis_${{ matrix.os }}_${{ matrix.arch }} ./dist
 
       - name: List
