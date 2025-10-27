@@ -33,6 +33,8 @@ jobs:
         run: |
           GOOS=${{ matrix.os }}
           GOARCH=${{ matrix.arch }}
+          BIN=dist/opa_redis_${{ matrix.os }}_${{ matrix.arch }}
+          mkdir -p dist
           make build
 
       - name: Upload binary
