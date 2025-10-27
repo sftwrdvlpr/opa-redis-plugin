@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [linux, darwin]
+        os: [linux]
         arch: [amd64]
     steps:
       - name: Checkout source
