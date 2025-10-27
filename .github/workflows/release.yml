@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: opa_redis_${{ matrix.os }}_${{ matrix.arch }}
-          parh: dist/opa_redis_${{ matrix.os }}_${{ matrix.arch }}
+          path: dist/opa_redis_${{ matrix.os }}_${{ matrix.arch }}
 
   release:
     needs: build
