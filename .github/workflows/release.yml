@@ -30,12 +30,14 @@ jobs:
           go-version: '1.24.6'
       
       - name: Build
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
         run: |
-          GOOS=${{ matrix.os }} \
-          GOARCH=${{ matrix.arch }} \
-          mkdir -p dist \
-          make build \
+          mkdir -p dist
+          make build
           mv opa_redis_${{ matrix.os }}_${{ matrix.arch }} ./dist
+          ls -lh ./opa_redis_*
 
       - name: List
         run: ls -lh ./dist
