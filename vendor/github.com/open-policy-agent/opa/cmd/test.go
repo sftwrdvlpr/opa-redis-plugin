@@ -24,12 +24,12 @@ import (
 
 	"github.com/open-policy-agent/opa/cmd/formats"
 	"github.com/open-policy-agent/opa/cmd/internal/env"
-	"github.com/open-policy-agent/opa/internal/runtime"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/bundle"
 	"github.com/open-policy-agent/opa/v1/compile"
 	"github.com/open-policy-agent/opa/v1/cover"
 	"github.com/open-policy-agent/opa/v1/loader"
+	"github.com/open-policy-agent/opa/v1/runtime/info"
 	"github.com/open-policy-agent/opa/v1/storage"
 	"github.com/open-policy-agent/opa/v1/storage/inmem"
 	"github.com/open-policy-agent/opa/v1/tester"
@@ -51,6 +51,7 @@ type testCommandParams struct {
 	benchmark    bool
 	benchMem     bool
 	runRegex     string
+	sortTests    *util.EnumFlag
 	count        int
 	target       *util.EnumFlag
 	skipExitZero bool
@@ -69,6 +70,7 @@ type testCommandParams struct {
 
 func newTestCommandParams() testCommandParams {
 	return testCommandParams{
+		sortTests:    formats.Flag(formats.SortNone, formats.SortDuration),
 		outputFormat: formats.Flag(formats.Pretty, formats.JSON, formats.GoBench),
 		explain:      newExplainFlag([]string{explainModeFails, explainModeFull, explainModeNotes, explainModeDebug}),
 		target:       util.NewEnumFlag(compile.TargetRego, []string{compile.TargetRego, compile.TargetWasm}),
@@ -378,7 +380,7 @@ func compileAndSetupTests(ctx context.Context, testParams testCommandParams, sto
 		WithUseTypeCheckAnnotations(true).
 		WithRewriteTestRules(testParams.varValues)
 
-	info, err := runtime.Term(runtime.Params{})
+	runtimeInfo, err := info.New()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -414,7 +416,7 @@ func compileAndSetupTests(ctx context.Context, testParams testCommandParams, sto
 		CapturePrintOutput(true).
 		EnableTracing(testParams.verbose || testParams.varValues).
 		SetCoverageQueryTracer(coverTracer).
-		SetRuntime(info).
+		SetRuntime(runtimeInfo).
 		SetModules(modules).
 		SetBundles(bundles).
 		SetTimeout(timeout).
@@ -434,11 +436,16 @@ func compileAndSetupTests(ctx context.Context, testParams testCommandParams, sto
 		case formats.JSON:
 			reporter = tester.JSONReporter{
 				Output: testParams.output,
+				Sort:   testParams.sortTests.String(),
 			}
 		case formats.GoBench:
 			goBench = true
 			fallthrough
 		default:
+			if testParams.sortTests.String() != formats.SortNone {
+				_, _ = fmt.Fprintln(testParams.errOutput, "warning: --sort is only supported with JSON format")
+			}
+
 			reporter = tester.PrettyReporter{
 				Verbose:                  testParams.verbose,
 				Output:                   testParams.output,
@@ -576,6 +583,7 @@ recommended as some updates might cause them to be dropped by OPA.
 	testCommand.Flags().BoolVar(&testParams.varValues, "var-values", false, "show local variable values in test output")
 	testCommand.Flags().IntVarP(&testParams.parallel, "parallel", "p", goRuntime.NumCPU(), "the number of tests that can run in parallel, defaulting to the number of CPUs (explicitly set with 0). Benchmarks are always run sequentially.")
 	testCommand.Flags().BoolVar(&testParams.failOnEmpty, "fail-on-empty", false, "Whether to fail the test when no test was run")
+	testCommand.Flags().Var(testParams.sortTests, "sort", "sort the JSON formatted test output")
 
 	// Shared flags
 	addOutputFormat(testCommand.Flags(), testParams.outputFormat)

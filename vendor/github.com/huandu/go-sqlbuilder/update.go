@@ -15,6 +15,7 @@ const (
 	updateMarkerAfterWith
 	updateMarkerAfterUpdate
 	updateMarkerAfterSet
+	updateMarkerAfterFrom
 	updateMarkerAfterWhere
 	updateMarkerAfterOrderBy
 	updateMarkerAfterLimit
@@ -71,6 +72,7 @@ type UpdateBuilder struct {
 	cteBuilder    *CTEBuilder
 
 	tables      []string
+	fromTables  []string
 	assignments []string
 	orderByCols []string
 	order       string
@@ -140,7 +142,17 @@ func (ub *UpdateBuilder) SetMore(assignment ...string) *UpdateBuilder {
 	return ub
 }
 
-// Where sets expressions of WHERE in UPDATE.
+// From sets table names of FROM in UPDATE.
+func (ub *UpdateBuilder) From(table ...string) *UpdateBuilder {
+	ub.fromTables = table
+	ub.marker = updateMarkerAfterFrom
+	return ub
+}
+
+// Where adds expressions to the WHERE clause in UPDATE.
+//
+// Multiple calls to Where will join expressions with AND.
+// To reset the WHERE clause, set the WhereClause field to nil.
 func (ub *UpdateBuilder) Where(andExpr ...string) *UpdateBuilder {
 	if len(andExpr) == 0 || estimateStringsBytes(andExpr) == 0 {
 		return ub
@@ -207,13 +219,40 @@ func (ub *UpdateBuilder) Div(field string, value interface{}) string {
 }
 
 // OrderBy sets columns of ORDER BY in UPDATE.
+//
+// It's recommended to use OrderByAsc or OrderByDesc instead for better support of multiple ORDER BY columns with different directions.
+// OrderBy combined with Asc/Desc only supports a single direction for all columns.
 func (ub *UpdateBuilder) OrderBy(col ...string) *UpdateBuilder {
 	ub.orderByCols = col
 	ub.marker = updateMarkerAfterOrderBy
 	return ub
 }
 
+// OrderByAsc sets a column of ORDER BY in UPDATE with ASC order.
+// It supports chaining multiple calls to add multiple ORDER BY columns with different directions.
+//
+//	ub.OrderByAsc("name").OrderByDesc("id")
+//	// Generates: ORDER BY name ASC, id DESC
+func (ub *UpdateBuilder) OrderByAsc(col string) *UpdateBuilder {
+	ub.orderByCols = append(ub.orderByCols, col+" ASC")
+	ub.marker = updateMarkerAfterOrderBy
+	return ub
+}
+
+// OrderByDesc sets a column of ORDER BY in UPDATE with DESC order.
+// It supports chaining multiple calls to add multiple ORDER BY columns with different directions.
+//
+//	ub.OrderByDesc("id").OrderByAsc("name")
+//	// Generates: ORDER BY id DESC, name ASC
+func (ub *UpdateBuilder) OrderByDesc(col string) *UpdateBuilder {
+	ub.orderByCols = append(ub.orderByCols, col+" DESC")
+	ub.marker = updateMarkerAfterOrderBy
+	return ub
+}
+
 // Asc sets order of ORDER BY to ASC.
+//
+// Deprecated: Use OrderByAsc instead. Asc only supports a single direction for all ORDER BY columns.
 func (ub *UpdateBuilder) Asc() *UpdateBuilder {
 	ub.order = "ASC"
 	ub.marker = updateMarkerAfterOrderBy
@@ -221,6 +260,8 @@ func (ub *UpdateBuilder) Asc() *UpdateBuilder {
 }
 
 // Desc sets order of ORDER BY to DESC.
+//
+// Deprecated: Use OrderByDesc instead. Desc only supports a single direction for all ORDER BY columns.
 func (ub *UpdateBuilder) Desc() *UpdateBuilder {
 	ub.order = "DESC"
 	ub.marker = updateMarkerAfterOrderBy
@@ -301,6 +342,15 @@ func (ub *UpdateBuilder) BuildWithFlavor(flavor Flavor, initialArg ...interface{
 
 	ub.injection.WriteTo(buf, updateMarkerAfterSet)
 
+	if flavor == SQLServer {
+		if len(ub.returning) > 0 {
+			buf.WriteLeadingString("OUTPUT ")
+			buf.WriteStringsPrefixed("INSERTED.", ub.returning, ", ")
+		}
+
+		ub.injection.WriteTo(buf, updateMarkerAfterReturning)
+	}
+
 	if flavor != MySQL {
 		// For ISO SQL, CTE table names should be written after FROM keyword.
 		if ub.cteBuilder != nil {
@@ -310,6 +360,20 @@ func (ub *UpdateBuilder) BuildWithFlavor(flavor Flavor, initialArg ...interface{
 				buf.WriteLeadingString("FROM ")
 				buf.WriteStrings(cteTableNames, ", ")
 			}
+		}
+	}
+
+	if flavor == PostgreSQL || flavor == SQLite || flavor == SQLServer {
+		if len(ub.fromTables) > 0 {
+
+			if ub.cteBuilder == nil || len(ub.cteBuilder.tableNamesForFrom()) == 0 {
+				buf.WriteLeadingString("FROM ")
+			} else {
+				buf.WriteString(", ")
+			}
+
+			buf.WriteStrings(ub.fromTables, ", ")
+			ub.injection.WriteTo(buf, updateMarkerAfterFrom)
 		}
 	}
 

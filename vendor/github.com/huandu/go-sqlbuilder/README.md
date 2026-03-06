@@ -11,9 +11,11 @@
   - [Pre-defined SQL builders](#pre-defined-sql-builders)
   - [Build `WHERE` clause](#build-where-clause)
   - [Share `WHERE` clause among builders](#share-where-clause-among-builders)
+  - [Build `ORDER BY` clause](#build-order-by-clause)
   - [Build SQL for different systems](#build-sql-for-different-systems)
   - [Using `Struct` as a light weight ORM](#using-struct-as-a-light-weight-orm)
   - [Nested SQL](#nested-sql)
+  - [Nested `JOIN`](#nested-join)
   - [Use `sql.Named` in a builder](#use-sqlnamed-in-a-builder)
   - [Argument modifiers](#argument-modifiers)
   - [Freestyle builder](#freestyle-builder)
@@ -201,7 +203,47 @@ fmt.Println(ub)
 // UPDATE users SET level = level + ? WHERE id = ?
 ```
 
+### Build `UPDATE ... FROM`
+
+`UpdateBuilder.From` emits a `FROM` clause for PostgreSQL, SQLite, and SQLServer flavors (it is ignored by other flavors). When a CTE includes tables created with `CTETable`, those table names are emitted before any explicit `From(...)` tables.
+
+```go
+ub := PostgreSQL.NewUpdateBuilder()
+ub.Update("users")
+ub.Set(ub.Assign("name", "Huan Du"))
+ub.From("people")
+ub.Where("users.person_id = people.id")
+
+sql, args := ub.Build()
+fmt.Println(sql)
+fmt.Println(args)
+
+// Output:
+// UPDATE users SET name = $1 FROM people WHERE users.person_id = people.id
+// [Huan Du]
+```
+
 Refer to the [WhereClause](https://pkg.go.dev/github.com/huandu/go-sqlbuilder#WhereClause) examples to learn its usage.
+
+### Build `ORDER BY` clause
+
+The `ORDER BY` clause is commonly used to sort query results. This package provides convenient methods to build `ORDER BY` clauses with proper ordering directions.
+
+For scenarios where you need to order by multiple columns with different directions (ASC/DESC), use `OrderByAsc` and `OrderByDesc` methods. These methods can be chained to add multiple columns with their specific ordering.
+
+```go
+sb := sqlbuilder.NewSelectBuilder()
+sb.Select("id", "name", "score").From("users")
+sb.OrderByDesc("score").OrderByAsc("name")
+
+sql, args := sb.Build()
+fmt.Println(sql)
+
+// Output:
+// SELECT id, name, score FROM users ORDER BY score DESC, name ASC
+```
+
+The older `OrderBy` method combined with `Asc`/`Desc` is still available but deprecated, as it only supports a single ordering direction for all columns. The new `OrderByAsc` and `OrderByDesc` methods provide more flexibility and clarity when working with multiple columns.
 
 ### Build SQL for different systems
 
@@ -327,6 +369,38 @@ fmt.Println(args)
 // [4 1]
 ```
 
+### Nested `JOIN`
+
+In addition to nested subqueries, you can also use `BuilderAs` to create nested JOINs. This is particularly useful when you need to join with a filtered or transformed dataset.
+
+Here is an example showing how to join a table with a nested subquery:
+
+```go
+sb := sqlbuilder.NewSelectBuilder()
+nestedSb := sqlbuilder.NewSelectBuilder()
+
+// Build the nested subquery
+nestedSb.Select("b.id", "b.user_id")
+nestedSb.From("users2 AS b")
+nestedSb.Where(nestedSb.GreaterThan("b.age", 20))
+
+// Build the main query with nested join
+sb.Select("a.id", "a.user_id")
+sb.From("users AS a")
+sb.Join(
+    sb.BuilderAs(nestedSb, "b"),
+    "a.user_id = b.user_id",
+)
+
+sql, args := sb.Build()
+fmt.Println(sql)
+fmt.Println(args)
+
+// Output:
+// SELECT a.id, a.user_id FROM users AS a JOIN (SELECT b.id, b.user_id FROM users2 AS b WHERE b.age > ?) AS b ON a.user_id = b.user_id
+// [20]
+```
+
 ### Use `sql.Named` in a builder
 
 The `sql.Named` function, as defined in the `database/sql` package, facilitates the creation of named arguments within SQL statements. This feature is essential for scenarios where an argument needs to be reused multiple times within a single SQL statement. Incorporating named arguments into a builder is straightforward: treat them as regular arguments.
@@ -412,7 +486,7 @@ var baseUserSelect = sqlbuilder.NewSelectBuilder().
 
 func ListActiveUsers(limit, offset int) (string, []interface{}) {
     sb := baseUserSelect.Clone() // independent copy
-    sb.OrderBy("id").Asc()
+    sb.OrderByAsc("id")
     sb.Limit(limit).Offset(offset)
     return sb.Build()
 }

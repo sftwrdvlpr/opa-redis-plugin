@@ -38,8 +38,8 @@ func New() *Profiler {
 }
 
 // Enabled returns true if profiler is enabled.
-func (*Profiler) Enabled() bool {
-	return true
+func (p *Profiler) Enabled() bool {
+	return p != nil
 }
 
 // Config returns the standard Tracer configuration for the profiler
@@ -57,7 +57,7 @@ func (p *Profiler) ReportByFile() Report {
 	report := Report{Files: map[string]*FileReport{}}
 
 	for file, hits := range p.hits {
-		stats := []ExprStats{}
+		stats := make([]ExprStats, 0, len(hits))
 		for row, stat := range hits {
 			if entry, ok := p.hitsByExprIndex[file][row]; ok {
 				stat.NumGenExpr = len(entry)
@@ -140,6 +140,7 @@ func (p *Profiler) ReportTopNResults(numResults int, criteria []string) []ExprSt
 }
 
 // Trace updates the profiler state.
+//
 // Deprecated: Use TraceEvent instead.
 func (p *Profiler) Trace(event *topdown.Event) {
 	p.TraceEvent(*event)

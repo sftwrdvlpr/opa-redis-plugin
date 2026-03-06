@@ -37,10 +37,9 @@ import (
 	"github.com/open-policy-agent/opa/internal/pathwatcher"
 	"github.com/open-policy-agent/opa/internal/prometheus"
 	"github.com/open-policy-agent/opa/internal/ref"
-	"github.com/open-policy-agent/opa/internal/report"
-	"github.com/open-policy-agent/opa/internal/runtime"
 	initload "github.com/open-policy-agent/opa/internal/runtime/init"
 	"github.com/open-policy-agent/opa/internal/uuid"
+	"github.com/open-policy-agent/opa/internal/versioncheck"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/bundle"
 	opa_config "github.com/open-policy-agent/opa/v1/config"
@@ -53,6 +52,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/plugins/logs"
 	metrics_config "github.com/open-policy-agent/opa/v1/plugins/server/metrics"
 	"github.com/open-policy-agent/opa/v1/repl"
+	"github.com/open-policy-agent/opa/v1/runtime/info"
 	"github.com/open-policy-agent/opa/v1/server"
 	"github.com/open-policy-agent/opa/v1/storage"
 	"github.com/open-policy-agent/opa/v1/storage/disk"
@@ -65,6 +65,9 @@ import (
 var (
 	registeredPlugins    map[string]plugins.Factory
 	registeredPluginsMux sync.Mutex
+
+	registeredStorageBackend    StorageBackendBuilder
+	registeredStorageBackendMux sync.Mutex
 )
 
 const (
@@ -74,6 +77,12 @@ const (
 	defaultLaterUploadInterval = 6 * time.Hour
 )
 
+// StorageBackendBuilder defines a function that creates a storage.Store instance.
+// This is the signature used for registering custom storage backends via
+// RegisterStorageBackend. The function receives the same parameters as the
+// StoreBuilder field in Params, allowing custom backends to initialize properly.
+type StorageBackendBuilder func(ctx context.Context, logger logging.Logger, registerer prometheus_sdk.Registerer, config []byte, id string) (storage.Store, error)
+
 // RegisterPlugin registers a plugin factory with the runtime
 // package. When the runtime is created, the factories are used to parse
 // plugin configuration and instantiate plugins. If no configuration is
@@ -82,6 +91,15 @@ func RegisterPlugin(name string, factory plugins.Factory) {
 	registeredPluginsMux.Lock()
 	defer registeredPluginsMux.Unlock()
 	registeredPlugins[name] = factory
+}
+
+// RegisterStorageBackend registers a custom storage backend builder.
+// If registered, it will be used instead of the default inmem storage.
+// Implement storage.Closer for resource cleanup during shutdown.
+func RegisterStorageBackend(builder StorageBackendBuilder) {
+	registeredStorageBackendMux.Lock()
+	defer registeredStorageBackendMux.Unlock()
+	registeredStorageBackend = builder
 }
 
 // Params stores the configuration for an OPA instance.
@@ -324,7 +342,7 @@ type Runtime struct {
 	logger            logging.Logger
 	server            *server.Server
 	metrics           *prometheus.Provider
-	reporter          report.Reporter
+	versionChecker    versioncheck.Checker
 	traceExporter     *otlptrace.Exporter
 	loadedPathsResult *initload.LoadPathsResult
 
@@ -396,10 +414,10 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, fmt.Errorf("config error: %w", err)
 	}
 
-	var reporter report.Reporter
+	var versionChecker versioncheck.Checker
 	if params.EnableVersionCheck {
 		var err error
-		reporter, err = report.New(report.Options{Logger: logger})
+		versionChecker, err = versioncheck.New(versioncheck.Options{Logger: logger})
 		if err != nil {
 			return nil, fmt.Errorf("config error: %w", err)
 		}
@@ -414,7 +432,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 
 	isAuthorizationEnabled := params.Authorization != server.AuthorizationOff
 
-	info, err := runtime.Term(runtime.Params{Config: config, IsAuthorizationEnabled: isAuthorizationEnabled, SkipKnownSchemaCheck: params.SkipKnownSchemaCheck})
+	runtimeInfo, err := info.NewWithOptions(info.Options{Config: config, IsAuthorizationEnabled: isAuthorizationEnabled, SkipKnownSchemaCheck: params.SkipKnownSchemaCheck})
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +460,13 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse disk store configuration: %w", err)
 		}
+	}
+
+	// If no explicit StoreBuilder is set, check for a registered custom backend
+	if params.StoreBuilder == nil {
+		registeredStorageBackendMux.Lock()
+		params.StoreBuilder = registeredStorageBackend
+		registeredStorageBackendMux.Unlock()
 	}
 
 	switch {
@@ -474,7 +499,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	manager, err := plugins.New(config,
 		params.ID,
 		store,
-		plugins.Info(info),
+		plugins.Info(runtimeInfo),
 		plugins.InitBundles(loaded.Bundles),
 		plugins.InitFiles(loaded.Files),
 		plugins.MaxErrors(params.ErrorLimit),
@@ -532,7 +557,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		Manager:           manager,
 		logger:            logger,
 		metrics:           metrics,
-		reporter:          reporter,
+		versionChecker:    versionChecker,
 		serverStatus:      ServerNotStarted,
 		traceExporter:     traceExporter,
 		loadedPathsResult: loaded,
@@ -833,8 +858,8 @@ func (rt *Runtime) SetDistributedTracingLogging() {
 	internal_tracing.SetupLogging(rt.logger)
 }
 
-func (rt *Runtime) checkOPAUpdate(ctx context.Context) *report.DataResponse {
-	resp, _ := rt.reporter.SendReport(ctx)
+func (rt *Runtime) checkOPAUpdate(ctx context.Context) *versioncheck.DataResponse {
+	resp, _ := rt.versionChecker.LatestVersion(ctx)
 	return resp
 }
 
@@ -848,9 +873,9 @@ func (rt *Runtime) checkOPAUpdateLoopDurations(ctx context.Context, done chan st
 	mr.New(mr.NewSource(time.Now().UnixNano())) // Seed the PRNG.
 
 	for {
-		resp, err := rt.reporter.SendReport(ctx)
+		resp, err := rt.versionChecker.LatestVersion(ctx)
 		if err != nil {
-			rt.logger.WithFields(map[string]any{"err": err}).Debug("Unable to send %s version report.", rt.Params.Brand)
+			rt.logger.WithFields(map[string]any{"err": err}).Debug("Unable to check %s version.", rt.Params.Brand)
 		} else {
 			if resp.Latest.OPAUpToDate {
 				rt.logger.WithFields(map[string]any{
@@ -983,6 +1008,16 @@ func (rt *Runtime) gracefulServerShutdown(s *server.Server) error {
 			rt.logger.WithFields(map[string]any{"err": err}).Error("Failed to shutdown OpenTelemetry trace exporter gracefully.")
 		}
 	}
+
+	// Close storage if it implements the storage.Closer interface
+	if closer, ok := rt.Store.(storage.Closer); ok {
+		if err := closer.Close(ctx); err != nil {
+			rt.logger.WithFields(map[string]any{"err": err}).Error("Failed to close storage gracefully.")
+			return err
+		}
+		rt.logger.Debug("Storage closed.")
+	}
+
 	return nil
 }
 

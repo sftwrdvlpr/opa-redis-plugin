@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/storage"
 	"github.com/open-policy-agent/opa/v1/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const (
@@ -410,17 +411,11 @@ func (c *Compiler) Build(ctx context.Context) error {
 }
 
 func (c *Compiler) init() error {
-
 	if c.capabilities == nil {
 		c.capabilities = ast.CapabilitiesForThisVersion()
 	}
 
-	var found bool
-	if slices.Contains(Targets, c.target) {
-		found = true
-	}
-
-	if !found {
+	if !slices.Contains(Targets, c.target) {
 		return fmt.Errorf("invalid target %q", c.target)
 	}
 
@@ -749,7 +744,7 @@ func (c *Compiler) compileWasm(ctx context.Context) error {
 		}
 
 		c.bundle.Manifest.WasmResolvers = append(c.bundle.Manifest.WasmResolvers, bundle.WasmResolver{
-			Module:      "/" + strings.TrimLeft(modulePath, "/"),
+			Module:      util.WithPrefix(modulePath, "/"),
 			Entrypoint:  entrypointPath,
 			Annotations: annotations,
 		})
@@ -1268,11 +1263,12 @@ func compile(c *ast.Capabilities, b *bundle.Bundle, dbg debug.Debug, enablePrint
 		return nil, compiler.Errors
 	}
 
-	minVersion, ok := compiler.Required.MinimumCompatibleVersion()
-	if !ok {
-		dbg.Printf("could not determine minimum compatible version!")
-	} else {
-		dbg.Printf("minimum compatible version: %v", minVersion)
+	if dbg.Writer() != io.Discard {
+		if minVersion, ok := compiler.Required.MinimumCompatibleVersion(); !ok {
+			dbg.Printf("could not determine minimum compatible version!")
+		} else {
+			dbg.Printf("minimum compatible version: %v", minVersion)
+		}
 	}
 
 	return compiler, nil

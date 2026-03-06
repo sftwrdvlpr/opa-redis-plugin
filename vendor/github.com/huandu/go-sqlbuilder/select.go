@@ -6,7 +6,6 @@ package sqlbuilder
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/huandu/go-clone"
 )
@@ -205,7 +204,10 @@ func (sb *SelectBuilder) JoinWithOption(option JoinOption, table string, onExpr 
 	return sb
 }
 
-// Where sets expressions of WHERE in SELECT.
+// Where adds expressions to the WHERE clause in SELECT.
+//
+// Multiple calls to Where will join expressions with AND.
+// To reset the WHERE clause, set the WhereClause field to nil.
 func (sb *SelectBuilder) Where(andExpr ...string) *SelectBuilder {
 	if len(andExpr) == 0 || estimateStringsBytes(andExpr) == 0 {
 		return sb
@@ -245,13 +247,40 @@ func (sb *SelectBuilder) GroupBy(col ...string) *SelectBuilder {
 }
 
 // OrderBy sets columns of ORDER BY in SELECT.
+//
+// It's recommended to use OrderByAsc or OrderByDesc instead for better support of multiple ORDER BY columns with different directions.
+// OrderBy combined with Asc/Desc only supports a single direction for all columns.
 func (sb *SelectBuilder) OrderBy(col ...string) *SelectBuilder {
 	sb.orderByCols = append(sb.orderByCols, col...)
 	sb.marker = selectMarkerAfterOrderBy
 	return sb
 }
 
+// OrderByAsc sets a column of ORDER BY in SELECT with ASC order.
+// It supports chaining multiple calls to add multiple ORDER BY columns with different directions.
+//
+//	sb.OrderByAsc("name").OrderByDesc("id")
+//	// Generates: ORDER BY name ASC, id DESC
+func (sb *SelectBuilder) OrderByAsc(col string) *SelectBuilder {
+	sb.orderByCols = append(sb.orderByCols, col+" ASC")
+	sb.marker = selectMarkerAfterOrderBy
+	return sb
+}
+
+// OrderByDesc sets a column of ORDER BY in SELECT with DESC order.
+// It supports chaining multiple calls to add multiple ORDER BY columns with different directions.
+//
+//	sb.OrderByDesc("id").OrderByAsc("name")
+//	// Generates: ORDER BY id DESC, name ASC
+func (sb *SelectBuilder) OrderByDesc(col string) *SelectBuilder {
+	sb.orderByCols = append(sb.orderByCols, col+" DESC")
+	sb.marker = selectMarkerAfterOrderBy
+	return sb
+}
+
 // Asc sets order of ORDER BY to ASC.
+//
+// Deprecated: Use OrderByAsc instead. Asc only supports a single direction for all ORDER BY columns.
 func (sb *SelectBuilder) Asc() *SelectBuilder {
 	sb.order = "ASC"
 	sb.marker = selectMarkerAfterOrderBy
@@ -259,6 +288,8 @@ func (sb *SelectBuilder) Asc() *SelectBuilder {
 }
 
 // Desc sets order of ORDER BY to DESC.
+//
+// Deprecated: Use OrderByDesc instead. Desc only supports a single direction for all ORDER BY columns.
 func (sb *SelectBuilder) Desc() *SelectBuilder {
 	sb.order = "DESC"
 	sb.marker = selectMarkerAfterOrderBy
@@ -342,8 +373,6 @@ func (sb *SelectBuilder) BuildWithFlavor(flavor Flavor, initialArg ...interface{
 	buf := newStringBuilder()
 	sb.injection.WriteTo(buf, selectMarkerInit)
 
-	oraclePage := flavor == Oracle && (len(sb.limitVar) > 0 || len(sb.offsetVar) > 0)
-
 	if sb.cteBuilderVar != "" {
 		buf.WriteLeadingString(sb.cteBuilderVar)
 		sb.injection.WriteTo(buf, selectMarkerAfterWith)
@@ -356,50 +385,10 @@ func (sb *SelectBuilder) BuildWithFlavor(flavor Flavor, initialArg ...interface{
 			buf.WriteString("DISTINCT ")
 		}
 
-		if oraclePage {
-			var selectCols = make([]string, 0, len(sb.selectCols))
-			for i := range sb.selectCols {
-				cols := strings.SplitN(sb.selectCols[i], ".", 2)
-
-				if len(cols) == 1 {
-					selectCols = append(selectCols, cols[0])
-				} else {
-					selectCols = append(selectCols, cols[1])
-				}
-			}
-			buf.WriteStrings(selectCols, ", ")
-		} else {
-			buf.WriteStrings(sb.selectCols, ", ")
-		}
+		buf.WriteStrings(sb.selectCols, ", ")
 	}
 
 	sb.injection.WriteTo(buf, selectMarkerAfterSelect)
-
-	if oraclePage {
-		if len(sb.selectCols) > 0 {
-			buf.WriteLeadingString("FROM (SELECT ")
-
-			if sb.distinct {
-				buf.WriteString("DISTINCT ")
-			}
-
-			var selectCols = make([]string, 0, len(sb.selectCols)+1)
-			selectCols = append(selectCols, "ROWNUM r")
-
-			for i := range sb.selectCols {
-				cols := strings.SplitN(sb.selectCols[i], ".", 2)
-				if len(cols) == 1 {
-					selectCols = append(selectCols, cols[0])
-				} else {
-					selectCols = append(selectCols, cols[1])
-				}
-			}
-
-			buf.WriteStrings(selectCols, ", ")
-			buf.WriteLeadingString("FROM (SELECT ")
-			buf.WriteStrings(sb.selectCols, ", ")
-		}
-	}
 
 	tableNames := sb.TableNames()
 
@@ -530,35 +519,20 @@ func (sb *SelectBuilder) BuildWithFlavor(flavor Flavor, initialArg ...interface{
 		}
 
 	case Oracle:
-		if oraclePage {
-			buf.WriteString(") ")
+		if len(sb.offsetVar) > 0 {
+			buf.WriteLeadingString("OFFSET ")
+			buf.WriteString(sb.offsetVar)
+			buf.WriteString(" ROWS")
+		}
 
-			if len(sb.tables) > 0 {
-				buf.WriteStrings(sb.tables, ", ")
+		if len(sb.limitVar) > 0 {
+			if len(sb.offsetVar) == 0 {
+				buf.WriteLeadingString("OFFSET 0 ROWS")
 			}
 
-			buf.WriteString(") WHERE ")
-
-			if len(sb.limitVar) > 0 {
-				buf.WriteString("r BETWEEN ")
-
-				if len(sb.offsetVar) > 0 {
-					buf.WriteString(sb.offsetVar)
-					buf.WriteString(" + 1 AND ")
-					buf.WriteString(sb.limitVar)
-					buf.WriteString(" + ")
-					buf.WriteString(sb.offsetVar)
-				} else {
-					buf.WriteString("1 AND ")
-					buf.WriteString(sb.limitVar)
-					buf.WriteString(" + 1")
-				}
-			} else {
-				// As oraclePage is true, sb.offsetVar must not be empty.
-				buf.WriteString("r >= ")
-				buf.WriteString(sb.offsetVar)
-				buf.WriteString(" + 1")
-			}
+			buf.WriteLeadingString("FETCH NEXT ")
+			buf.WriteString(sb.limitVar)
+			buf.WriteString(" ROWS ONLY")
 		}
 
 	case Informix:

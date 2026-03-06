@@ -147,7 +147,7 @@ func (p *Plugin) Stop(ctx context.Context) {
 
 // Reconfigure notifies the plugin that it's configuration has changed.
 // Any bundle configs that have changed or been added/removed will take
-// affect.
+// effect.
 func (p *Plugin) Reconfigure(ctx context.Context, config any) {
 	// Reconfiguring should not occur in parallel, lock to ensure
 	// nothing swaps underneath us with the current p.config and the updated one.
@@ -157,9 +157,17 @@ func (p *Plugin) Reconfigure(ctx context.Context, config any) {
 
 	// Look for any bundles that have had their config changed, are new, or have been removed
 	newConfig := config.(*Config)
+
+	for name, source := range newConfig.Bundles {
+		err := source.ValidateAndInjectDefaults()
+		if err != nil {
+			p.log(name).Error("Failed to validate bundle configuration: %s", err)
+			p.cfgMtx.Unlock()
+			return
+		}
+	}
 	newBundles, updatedBundles, deletedBundles := p.configDelta(newConfig)
 	p.config = *newConfig
-
 	p.cfgMtx.Unlock()
 
 	if len(updatedBundles) == 0 && len(newBundles) == 0 && len(deletedBundles) == 0 {
@@ -784,7 +792,7 @@ func getNormalizedBundleName(name string) string {
 	sb := new(strings.Builder)
 	for i := range len(name) {
 		if isReservedCharacter(rune(name[i])) {
-			sb.WriteString(fmt.Sprintf("\\%c", name[i]))
+			fmt.Fprintf(sb, "\\%c", name[i])
 		} else {
 			sb.WriteByte(name[i])
 		}

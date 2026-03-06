@@ -272,6 +272,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if len(errorList) > 0 {
 		errMsg := "error while shutting down: "
 		for i, err := range errorList {
+			//nolint:perfsprint
 			errMsg += fmt.Sprintf("(%d) %s. ", i, err.Error())
 		}
 		return errors.New(errMsg)
@@ -725,6 +726,10 @@ func (s *Server) getListenerForUNIXSocket(u *url.URL, h http.Handler, t httpList
 		os.Remove(socketPath)
 	}
 
+	if s.h2cEnabled {
+		h2s := &http2.Server{}
+		h = h2c.NewHandler(h, h2s)
+	}
 	domainSocketServer := http.Server{Handler: h}
 	unixListener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -2787,7 +2792,7 @@ func stringPathToRef(s string) (ast.Ref, error) {
 		if err != nil {
 			r = append(r, ast.StringTerm(x))
 		} else {
-			r = append(r, ast.IntNumberTerm(i))
+			r = append(r, ast.InternedTerm(i))
 		}
 	}
 	return r, nil

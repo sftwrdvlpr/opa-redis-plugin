@@ -325,6 +325,7 @@ func (r *Runner) SetStore(store storage.Store) *Runner {
 }
 
 // SetCoverageTracer sets the tracer to use to compute coverage.
+//
 // Deprecated: Use SetCoverageQueryTracer instead.
 func (r *Runner) SetCoverageTracer(tracer topdown.Tracer) *Runner {
 	if tracer == nil {
@@ -406,6 +407,7 @@ func (r *Runner) Target(target string) *Runner {
 }
 
 // Run executes all tests contained in supplied modules.
+//
 // Deprecated: Use RunTests and the Runner#SetModules or Runner#SetBundles
 // helpers instead. This will NOT use the modules or bundles set on the Runner.
 func (r *Runner) Run(ctx context.Context, modules map[string]*ast.Module) (chan *Result, error) {
@@ -455,13 +457,13 @@ func (r *Runner) setupTestRun(ctx context.Context, txn storage.Transaction, enab
 	}
 
 	// rewrite duplicate test_* rule names as we compile modules
-	r.compiler.WithStageAfter("RewriteRuleHeadRefs", ast.CompilerStageDefinition{
+	r.compiler.WithStageAfterID(ast.StageRewriteRuleHeadRefs, ast.CompilerStageDefinition{
 		Name:       "RewriteDuplicateTestNames",
 		MetricName: "rewrite_duplicate_test_names",
 		Stage:      rewriteDuplicateTestNames,
 	})
 
-	r.compiler.WithStageAfter("RewriteLocalVars", ast.CompilerStageDefinition{
+	r.compiler.WithStageAfterID(ast.StageRewriteLocalVars, ast.CompilerStageDefinition{
 		Name:       "InjectTestCaseFunc",
 		MetricName: "inject_test_case_func",
 		Stage:      injectTestCaseFunc,
@@ -797,7 +799,7 @@ func injectTestCaseFunc(compiler *ast.Compiler) *ast.Error {
 					expr := rule.Body[i]
 
 					ast.WalkVars(expr, func(v ast.Var) bool {
-						if term.Value.Compare(v) == 0 {
+						if v.Equal(term.Value) {
 							injectBelowMap.Put(v, ast.Number(strconv.Itoa(i)))
 						}
 						return false

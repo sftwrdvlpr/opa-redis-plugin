@@ -361,6 +361,7 @@ func (r *REPL) WithRegoVersion(v ast.RegoVersion) *REPL {
 }
 
 // WithV1Compatible sets the Rego version to v1.
+//
 // Deprecated: Use WithRegoVersion instead.
 func (r *REPL) WithV1Compatible(v1Compatible bool) *REPL {
 	if v1Compatible {
@@ -929,7 +930,7 @@ func (r *REPL) parserOptions() (ast.ParserOptions, error) {
 		opts, err := future.ParserOptionsFromFutureImports(r.modules[r.currentModuleID].Imports)
 		if err == nil {
 			for _, i := range r.modules[r.currentModuleID].Imports {
-				if ast.Compare(i.Path.Value, ast.RegoV1CompatibleRef) == 0 {
+				if ast.RegoV1CompatibleRef.Equal(i.Path.Value) {
 					opts.RegoVersion = ast.RegoV1
 				}
 			}
@@ -1292,9 +1293,8 @@ func (r *REPL) loadModules(ctx context.Context, txn storage.Transaction) (map[st
 }
 
 func (r *REPL) printTypes(_ context.Context, typeEnv *ast.TypeEnv, body ast.Body) {
-
 	ast.WalkRefs(body, func(ref ast.Ref) bool {
-		fmt.Fprintf(r.output, "# %v: %v\n", ref, typeEnv.Get(ref))
+		fmt.Fprintf(r.output, "# %v: %v\n", ref, typeEnv.GetByRef(ref))
 		return false
 	})
 
@@ -1485,7 +1485,7 @@ func printHelpCommands(output io.Writer) {
 	all := append(extra[:], builtin[:]...)
 
 	// Compute max length of all command and topic names.
-	names := []string{}
+	names := make([]string, 0, len(all)+len(topics))
 
 	for _, x := range all {
 		names = append(names, x.syntax())

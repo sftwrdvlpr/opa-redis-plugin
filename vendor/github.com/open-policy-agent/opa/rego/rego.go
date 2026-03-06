@@ -68,6 +68,7 @@ func EvalInstrument(instrument bool) EvalOption {
 }
 
 // EvalTracer configures a tracer for a Prepared Query's evaluation
+//
 // Deprecated: Use EvalQueryTracer instead.
 func EvalTracer(tracer topdown.Tracer) EvalOption {
 	return v1.EvalTracer(tracer)
@@ -407,6 +408,14 @@ func Store(s storage.Store) func(r *Rego) {
 	return v1.Store(s)
 }
 
+// Data returns an argument that sets the Rego data document. Data should be
+// a map representing the data document. This is a simpler alternative to
+// using Store with inmem.NewFromObject for cases where an in-memory store
+// with static data is sufficient.
+func Data(x map[string]any) func(r *Rego) {
+	return v1.Data(x)
+}
+
 // StoreReadAST returns an argument that sets whether the store should eagerly convert data to AST values.
 //
 // Only applicable when no store has been set on the Rego object through the Store option.
@@ -441,6 +450,7 @@ func Trace(yes bool) func(r *Rego) {
 }
 
 // Tracer returns an argument that adds a query tracer to r.
+//
 // Deprecated: Use QueryTracer instead.
 func Tracer(t topdown.Tracer) func(r *Rego) {
 	return v1.Tracer(t)
