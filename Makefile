@@ -11,7 +11,7 @@ GOARCH := $(shell go env GOARCH)
 GOOS := $(shell go env GOOS)
 DISABLE_CGO := CGO_ENABLED=0
 
-BIN := opa_redis_plugin
+BIN := opa_redis_$(GOOS)_$(GOARCH)
 
 GO_TAGS := -tags=
 ifeq ($(WASM_ENABLED),1)
