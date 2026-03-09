@@ -1,10 +1,11 @@
-module github.com/tibotix/opa-redis-plugin
+module github.com/sftwrdvlpr/opa-redis-plugin
 
 go 1.25.2
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/open-policy-agent/opa v1.14.0
+	github.com/tibotix/opa-redis-plugin v0.4.0
 )
 
 require (
