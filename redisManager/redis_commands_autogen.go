@@ -2,7 +2,7 @@
 package redisManager
 
 import (
-	"github.com/tibotix/opa-redis-plugin/utils"
+	"github.com/sftwrdvlpr/opa-redis-plugin/utils"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -542,12 +542,12 @@ func registerKEYS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp60409 []*ast.Term
+				var tmp77452 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp60409 = append(tmp60409, term)
+					tmp77452 = append(tmp77452, term)
 				}
-				term := ast.ArrayTerm(tmp60409...)
+				term := ast.ArrayTerm(tmp77452...)
 
 				return term, nil
 
@@ -1139,12 +1139,12 @@ func registerSORT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp66159 []*ast.Term
+				var tmp39421 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp66159 = append(tmp66159, term)
+					tmp39421 = append(tmp39421, term)
 				}
-				term := ast.ArrayTerm(tmp66159...)
+				term := ast.ArrayTerm(tmp39421...)
 
 				return term, nil
 
@@ -1231,7 +1231,7 @@ func registerSORTINTERFACES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp10412 []*ast.Term
+				var tmp05860 []*ast.Term
 				for _, v := range r0 {
 
 					term := ast.NullTerm()
@@ -1239,9 +1239,9 @@ func registerSORTINTERFACES(m *RedisManager) {
 						term = ast.StringTerm(s)
 					}
 
-					tmp10412 = append(tmp10412, term)
+					tmp05860 = append(tmp05860, term)
 				}
-				term := ast.ArrayTerm(tmp10412...)
+				term := ast.ArrayTerm(tmp05860...)
 
 				return term, nil
 
@@ -1808,7 +1808,7 @@ func registerMGET(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp62111 []*ast.Term
+				var tmp67851 []*ast.Term
 				for _, v := range r0 {
 
 					term := ast.NullTerm()
@@ -1816,9 +1816,9 @@ func registerMGET(m *RedisManager) {
 						term = ast.StringTerm(s)
 					}
 
-					tmp62111 = append(tmp62111, term)
+					tmp67851 = append(tmp67851, term)
 				}
-				term := ast.ArrayTerm(tmp62111...)
+				term := ast.ArrayTerm(tmp67851...)
 
 				return term, nil
 
@@ -2615,12 +2615,12 @@ func registerBITFIELD(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp37219 []*ast.Term
+				var tmp15620 []*ast.Term
 				for _, v := range r0 {
 					term := ast.IntNumberTerm(int(v))
-					tmp37219 = append(tmp37219, term)
+					tmp15620 = append(tmp15620, term)
 				}
-				term := ast.ArrayTerm(tmp37219...)
+				term := ast.ArrayTerm(tmp15620...)
 
 				return term, nil
 
@@ -2667,12 +2667,12 @@ func registerSCAN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp09212 []*ast.Term
+				var tmp79123 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp09212 = append(tmp09212, term)
+					tmp79123 = append(tmp79123, term)
 				}
-				tr0 := ast.ArrayTerm(tmp09212...)
+				tr0 := ast.ArrayTerm(tmp79123...)
 				tr1 := ast.UIntNumberTerm(uint64(r1))
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -2724,12 +2724,12 @@ func registerSCANTYPE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp92120 []*ast.Term
+				var tmp63672 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp92120 = append(tmp92120, term)
+					tmp63672 = append(tmp63672, term)
 				}
-				tr0 := ast.ArrayTerm(tmp92120...)
+				tr0 := ast.ArrayTerm(tmp63672...)
 				tr1 := ast.UIntNumberTerm(uint64(r1))
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -2781,12 +2781,12 @@ func registerSSCAN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp30753 []*ast.Term
+				var tmp24999 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp30753 = append(tmp30753, term)
+					tmp24999 = append(tmp24999, term)
 				}
-				tr0 := ast.ArrayTerm(tmp30753...)
+				tr0 := ast.ArrayTerm(tmp24999...)
 				tr1 := ast.UIntNumberTerm(uint64(r1))
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -2838,12 +2838,12 @@ func registerHSCAN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp17336 []*ast.Term
+				var tmp05489 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp17336 = append(tmp17336, term)
+					tmp05489 = append(tmp05489, term)
 				}
-				tr0 := ast.ArrayTerm(tmp17336...)
+				tr0 := ast.ArrayTerm(tmp05489...)
 				tr1 := ast.UIntNumberTerm(uint64(r1))
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -2895,12 +2895,12 @@ func registerZSCAN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp57370 []*ast.Term
+				var tmp93299 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp57370 = append(tmp57370, term)
+					tmp93299 = append(tmp93299, term)
 				}
-				tr0 := ast.ArrayTerm(tmp57370...)
+				tr0 := ast.ArrayTerm(tmp93299...)
 				tr1 := ast.UIntNumberTerm(uint64(r1))
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -3057,13 +3057,13 @@ func registerHGETALL(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp70977 [][2]*ast.Term
+				var tmp97984 [][2]*ast.Term
 				for key, value := range r0 {
 					k := ast.StringTerm(key)
 					v := ast.StringTerm(value)
-					tmp70977 = append(tmp70977, [2]*ast.Term{k, v})
+					tmp97984 = append(tmp97984, [2]*ast.Term{k, v})
 				}
-				term := ast.ObjectTerm(tmp70977...)
+				term := ast.ObjectTerm(tmp97984...)
 
 				return term, nil
 
@@ -3190,12 +3190,12 @@ func registerHKEYS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp82935 []*ast.Term
+				var tmp03769 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp82935 = append(tmp82935, term)
+					tmp03769 = append(tmp03769, term)
 				}
-				term := ast.ArrayTerm(tmp82935...)
+				term := ast.ArrayTerm(tmp03769...)
 
 				return term, nil
 
@@ -3272,7 +3272,7 @@ func registerHMGET(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp64574 []*ast.Term
+				var tmp02942 []*ast.Term
 				for _, v := range r0 {
 
 					term := ast.NullTerm()
@@ -3280,9 +3280,9 @@ func registerHMGET(m *RedisManager) {
 						term = ast.StringTerm(s)
 					}
 
-					tmp64574 = append(tmp64574, term)
+					tmp02942 = append(tmp02942, term)
 				}
-				term := ast.ArrayTerm(tmp64574...)
+				term := ast.ArrayTerm(tmp02942...)
 
 				return term, nil
 
@@ -3444,12 +3444,12 @@ func registerHVALS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp07552 []*ast.Term
+				var tmp74647 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp07552 = append(tmp07552, term)
+					tmp74647 = append(tmp74647, term)
 				}
-				term := ast.ArrayTerm(tmp07552...)
+				term := ast.ArrayTerm(tmp74647...)
 
 				return term, nil
 
@@ -3496,12 +3496,12 @@ func registerHRANDFIELD(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp15007 []*ast.Term
+				var tmp73302 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp15007 = append(tmp15007, term)
+					tmp73302 = append(tmp73302, term)
 				}
-				term := ast.ArrayTerm(tmp15007...)
+				term := ast.ArrayTerm(tmp73302...)
 
 				return term, nil
 
@@ -3543,12 +3543,12 @@ func registerBLPOP(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp30116 []*ast.Term
+				var tmp69322 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp30116 = append(tmp30116, term)
+					tmp69322 = append(tmp69322, term)
 				}
-				term := ast.ArrayTerm(tmp30116...)
+				term := ast.ArrayTerm(tmp69322...)
 
 				return term, nil
 
@@ -3590,12 +3590,12 @@ func registerBRPOP(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp64773 []*ast.Term
+				var tmp77814 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp64773 = append(tmp64773, term)
+					tmp77814 = append(tmp77814, term)
 				}
-				term := ast.ArrayTerm(tmp64773...)
+				term := ast.ArrayTerm(tmp77814...)
 
 				return term, nil
 
@@ -3932,12 +3932,12 @@ func registerLPOPCOUNT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp35995 []*ast.Term
+				var tmp64255 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp35995 = append(tmp35995, term)
+					tmp64255 = append(tmp64255, term)
 				}
-				term := ast.ArrayTerm(tmp35995...)
+				term := ast.ArrayTerm(tmp64255...)
 
 				return term, nil
 
@@ -4034,12 +4034,12 @@ func registerLPOSCOUNT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp23475 []*ast.Term
+				var tmp88077 []*ast.Term
 				for _, v := range r0 {
 					term := ast.IntNumberTerm(int(v))
-					tmp23475 = append(tmp23475, term)
+					tmp88077 = append(tmp88077, term)
 				}
-				term := ast.ArrayTerm(tmp23475...)
+				term := ast.ArrayTerm(tmp88077...)
 
 				return term, nil
 
@@ -4166,12 +4166,12 @@ func registerLRANGE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp49691 []*ast.Term
+				var tmp60591 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp49691 = append(tmp49691, term)
+					tmp60591 = append(tmp60591, term)
 				}
-				term := ast.ArrayTerm(tmp49691...)
+				term := ast.ArrayTerm(tmp60591...)
 
 				return term, nil
 
@@ -4383,12 +4383,12 @@ func registerRPOPCOUNT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp19660 []*ast.Term
+				var tmp39966 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp19660 = append(tmp19660, term)
+					tmp39966 = append(tmp39966, term)
 				}
-				term := ast.ArrayTerm(tmp19660...)
+				term := ast.ArrayTerm(tmp39966...)
 
 				return term, nil
 
@@ -4725,12 +4725,12 @@ func registerSDIFF(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp12289 []*ast.Term
+				var tmp42781 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp12289 = append(tmp12289, term)
+					tmp42781 = append(tmp42781, term)
 				}
-				term := ast.ArrayTerm(tmp12289...)
+				term := ast.ArrayTerm(tmp42781...)
 
 				return term, nil
 
@@ -4807,12 +4807,12 @@ func registerSINTER(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp66941 []*ast.Term
+				var tmp80636 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp66941 = append(tmp66941, term)
+					tmp80636 = append(tmp80636, term)
 				}
-				term := ast.ArrayTerm(tmp66941...)
+				term := ast.ArrayTerm(tmp80636...)
 
 				return term, nil
 
@@ -4934,12 +4934,12 @@ func registerSMISMEMBER(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp95333 []*ast.Term
+				var tmp06584 []*ast.Term
 				for _, v := range r0 {
 					term := ast.BooleanTerm(v)
-					tmp95333 = append(tmp95333, term)
+					tmp06584 = append(tmp06584, term)
 				}
-				term := ast.ArrayTerm(tmp95333...)
+				term := ast.ArrayTerm(tmp06584...)
 
 				return term, nil
 
@@ -4976,12 +4976,12 @@ func registerSMEMBERS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp13468 []*ast.Term
+				var tmp52934 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp13468 = append(tmp13468, term)
+					tmp52934 = append(tmp52934, term)
 				}
-				term := ast.ArrayTerm(tmp13468...)
+				term := ast.ArrayTerm(tmp52934...)
 
 				return term, nil
 
@@ -5018,15 +5018,15 @@ func registerSMEMBERSMAP(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp99002 [][2]*ast.Term
+				var tmp99548 [][2]*ast.Term
 				for key, _ := range r0 {
 					k := ast.StringTerm(key)
 
 					v := ast.ObjectTerm()
 
-					tmp99002 = append(tmp99002, [2]*ast.Term{k, v})
+					tmp99548 = append(tmp99548, [2]*ast.Term{k, v})
 				}
-				term := ast.ObjectTerm(tmp99002...)
+				term := ast.ObjectTerm(tmp99548...)
 
 				return term, nil
 
@@ -5148,12 +5148,12 @@ func registerSPOPN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp35545 []*ast.Term
+				var tmp45712 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp35545 = append(tmp35545, term)
+					tmp45712 = append(tmp45712, term)
 				}
-				term := ast.ArrayTerm(tmp35545...)
+				term := ast.ArrayTerm(tmp45712...)
 
 				return term, nil
 
@@ -5230,12 +5230,12 @@ func registerSRANDMEMBERN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp38056 []*ast.Term
+				var tmp72253 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp38056 = append(tmp38056, term)
+					tmp72253 = append(tmp72253, term)
 				}
-				term := ast.ArrayTerm(tmp38056...)
+				term := ast.ArrayTerm(tmp72253...)
 
 				return term, nil
 
@@ -5312,12 +5312,12 @@ func registerSUNION(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp25847 []*ast.Term
+				var tmp22313 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp25847 = append(tmp25847, term)
+					tmp22313 = append(tmp22313, term)
 				}
-				term := ast.ArrayTerm(tmp25847...)
+				term := ast.ArrayTerm(tmp22313...)
 
 				return term, nil
 
@@ -5514,12 +5514,12 @@ func registerXRANGE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp80000 []*ast.Term
+				var tmp26919 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp17406 [][2]*ast.Term
+					var tmp11185 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -5528,15 +5528,15 @@ func registerXRANGE(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp17406 = append(tmp17406, [2]*ast.Term{k, v})
+						tmp11185 = append(tmp11185, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp17406...)
+					termValues := ast.ObjectTerm(tmp11185...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp80000 = append(tmp80000, term)
+					tmp26919 = append(tmp26919, term)
 				}
-				term := ast.ArrayTerm(tmp80000...)
+				term := ast.ArrayTerm(tmp26919...)
 
 				return term, nil
 
@@ -5588,12 +5588,12 @@ func registerXRANGEN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp44109 []*ast.Term
+				var tmp16670 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp81247 [][2]*ast.Term
+					var tmp47451 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -5602,15 +5602,15 @@ func registerXRANGEN(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp81247 = append(tmp81247, [2]*ast.Term{k, v})
+						tmp47451 = append(tmp47451, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp81247...)
+					termValues := ast.ObjectTerm(tmp47451...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp44109 = append(tmp44109, term)
+					tmp16670 = append(tmp16670, term)
 				}
-				term := ast.ArrayTerm(tmp44109...)
+				term := ast.ArrayTerm(tmp16670...)
 
 				return term, nil
 
@@ -5657,12 +5657,12 @@ func registerXREVRANGE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp96208 []*ast.Term
+				var tmp93982 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp91761 [][2]*ast.Term
+					var tmp16982 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -5671,15 +5671,15 @@ func registerXREVRANGE(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp91761 = append(tmp91761, [2]*ast.Term{k, v})
+						tmp16982 = append(tmp16982, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp91761...)
+					termValues := ast.ObjectTerm(tmp16982...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp96208 = append(tmp96208, term)
+					tmp93982 = append(tmp93982, term)
 				}
-				term := ast.ArrayTerm(tmp96208...)
+				term := ast.ArrayTerm(tmp93982...)
 
 				return term, nil
 
@@ -5731,12 +5731,12 @@ func registerXREVRANGEN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp91383 []*ast.Term
+				var tmp17148 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp78623 [][2]*ast.Term
+					var tmp98538 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -5745,15 +5745,15 @@ func registerXREVRANGEN(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp78623 = append(tmp78623, [2]*ast.Term{k, v})
+						tmp98538 = append(tmp98538, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp78623...)
+					termValues := ast.ObjectTerm(tmp98538...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp91383 = append(tmp91383, term)
+					tmp17148 = append(tmp17148, term)
 				}
-				term := ast.ArrayTerm(tmp91383...)
+				term := ast.ArrayTerm(tmp17148...)
 
 				return term, nil
 
@@ -5790,17 +5790,17 @@ func registerXREAD(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp58824 []*ast.Term
+				var tmp54385 []*ast.Term
 				for _, v := range r0 {
 
 					termStream := ast.StringTerm(v.Stream)
 
-					var tmp37669 []*ast.Term
+					var tmp22443 []*ast.Term
 					for _, v := range v.Messages {
 
 						termID := ast.StringTerm(v.ID)
 
-						var tmp38051 [][2]*ast.Term
+						var tmp21838 [][2]*ast.Term
 						for key, value := range v.Values {
 							k := ast.StringTerm(key)
 
@@ -5809,21 +5809,21 @@ func registerXREAD(m *RedisManager) {
 								v = ast.StringTerm(s)
 							}
 
-							tmp38051 = append(tmp38051, [2]*ast.Term{k, v})
+							tmp21838 = append(tmp21838, [2]*ast.Term{k, v})
 						}
-						termValues := ast.ObjectTerm(tmp38051...)
+						termValues := ast.ObjectTerm(tmp21838...)
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-						tmp37669 = append(tmp37669, term)
+						tmp22443 = append(tmp22443, term)
 					}
-					termMessages := ast.ArrayTerm(tmp37669...)
+					termMessages := ast.ArrayTerm(tmp22443...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Stream"), termStream}, [2]*ast.Term{ast.StringTerm("Messages"), termMessages})
 
-					tmp58824 = append(tmp58824, term)
+					tmp54385 = append(tmp54385, term)
 				}
-				term := ast.ArrayTerm(tmp58824...)
+				term := ast.ArrayTerm(tmp54385...)
 
 				return term, nil
 
@@ -5860,17 +5860,17 @@ func registerXREADSTREAMS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp99783 []*ast.Term
+				var tmp93051 []*ast.Term
 				for _, v := range r0 {
 
 					termStream := ast.StringTerm(v.Stream)
 
-					var tmp34192 []*ast.Term
+					var tmp59975 []*ast.Term
 					for _, v := range v.Messages {
 
 						termID := ast.StringTerm(v.ID)
 
-						var tmp52271 [][2]*ast.Term
+						var tmp37336 [][2]*ast.Term
 						for key, value := range v.Values {
 							k := ast.StringTerm(key)
 
@@ -5879,21 +5879,21 @@ func registerXREADSTREAMS(m *RedisManager) {
 								v = ast.StringTerm(s)
 							}
 
-							tmp52271 = append(tmp52271, [2]*ast.Term{k, v})
+							tmp37336 = append(tmp37336, [2]*ast.Term{k, v})
 						}
-						termValues := ast.ObjectTerm(tmp52271...)
+						termValues := ast.ObjectTerm(tmp37336...)
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-						tmp34192 = append(tmp34192, term)
+						tmp59975 = append(tmp59975, term)
 					}
-					termMessages := ast.ArrayTerm(tmp34192...)
+					termMessages := ast.ArrayTerm(tmp59975...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Stream"), termStream}, [2]*ast.Term{ast.StringTerm("Messages"), termMessages})
 
-					tmp99783 = append(tmp99783, term)
+					tmp93051 = append(tmp93051, term)
 				}
-				term := ast.ArrayTerm(tmp99783...)
+				term := ast.ArrayTerm(tmp93051...)
 
 				return term, nil
 
@@ -6195,17 +6195,17 @@ func registerXREADGROUP(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp91791 []*ast.Term
+				var tmp18257 []*ast.Term
 				for _, v := range r0 {
 
 					termStream := ast.StringTerm(v.Stream)
 
-					var tmp85200 []*ast.Term
+					var tmp67090 []*ast.Term
 					for _, v := range v.Messages {
 
 						termID := ast.StringTerm(v.ID)
 
-						var tmp81388 [][2]*ast.Term
+						var tmp68844 [][2]*ast.Term
 						for key, value := range v.Values {
 							k := ast.StringTerm(key)
 
@@ -6214,21 +6214,21 @@ func registerXREADGROUP(m *RedisManager) {
 								v = ast.StringTerm(s)
 							}
 
-							tmp81388 = append(tmp81388, [2]*ast.Term{k, v})
+							tmp68844 = append(tmp68844, [2]*ast.Term{k, v})
 						}
-						termValues := ast.ObjectTerm(tmp81388...)
+						termValues := ast.ObjectTerm(tmp68844...)
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-						tmp85200 = append(tmp85200, term)
+						tmp67090 = append(tmp67090, term)
 					}
-					termMessages := ast.ArrayTerm(tmp85200...)
+					termMessages := ast.ArrayTerm(tmp67090...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Stream"), termStream}, [2]*ast.Term{ast.StringTerm("Messages"), termMessages})
 
-					tmp91791 = append(tmp91791, term)
+					tmp18257 = append(tmp18257, term)
 				}
-				term := ast.ArrayTerm(tmp91791...)
+				term := ast.ArrayTerm(tmp18257...)
 
 				return term, nil
 
@@ -6321,13 +6321,13 @@ func registerXPENDING(m *RedisManager) {
 
 				termHigher := ast.StringTerm(r0.Higher)
 
-				var tmp97341 [][2]*ast.Term
+				var tmp93598 [][2]*ast.Term
 				for key, value := range r0.Consumers {
 					k := ast.StringTerm(key)
 					v := ast.IntNumberTerm(int(value))
-					tmp97341 = append(tmp97341, [2]*ast.Term{k, v})
+					tmp93598 = append(tmp93598, [2]*ast.Term{k, v})
 				}
-				termConsumers := ast.ObjectTerm(tmp97341...)
+				termConsumers := ast.ObjectTerm(tmp93598...)
 
 				term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Count"), termCount}, [2]*ast.Term{ast.StringTerm("Lower"), termLower}, [2]*ast.Term{ast.StringTerm("Higher"), termHigher}, [2]*ast.Term{ast.StringTerm("Consumers"), termConsumers})
 
@@ -6366,7 +6366,7 @@ func registerXPENDINGEXT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp12974 []*ast.Term
+				var tmp45625 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
@@ -6379,9 +6379,9 @@ func registerXPENDINGEXT(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Consumer"), termConsumer}, [2]*ast.Term{ast.StringTerm("Idle"), termIdle}, [2]*ast.Term{ast.StringTerm("RetryCount"), termRetryCount})
 
-					tmp12974 = append(tmp12974, term)
+					tmp45625 = append(tmp45625, term)
 				}
-				term := ast.ArrayTerm(tmp12974...)
+				term := ast.ArrayTerm(tmp45625...)
 
 				return term, nil
 
@@ -6418,12 +6418,12 @@ func registerXCLAIM(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp49728 []*ast.Term
+				var tmp03234 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp98041 [][2]*ast.Term
+					var tmp55693 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -6432,15 +6432,15 @@ func registerXCLAIM(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp98041 = append(tmp98041, [2]*ast.Term{k, v})
+						tmp55693 = append(tmp55693, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp98041...)
+					termValues := ast.ObjectTerm(tmp55693...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp49728 = append(tmp49728, term)
+					tmp03234 = append(tmp03234, term)
 				}
-				term := ast.ArrayTerm(tmp49728...)
+				term := ast.ArrayTerm(tmp03234...)
 
 				return term, nil
 
@@ -6477,12 +6477,12 @@ func registerXCLAIMJUSTID(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp15726 []*ast.Term
+				var tmp34714 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp15726 = append(tmp15726, term)
+					tmp34714 = append(tmp34714, term)
 				}
-				term := ast.ArrayTerm(tmp15726...)
+				term := ast.ArrayTerm(tmp34714...)
 
 				return term, nil
 
@@ -6519,12 +6519,12 @@ func registerXAUTOCLAIM(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp71325 []*ast.Term
+				var tmp28630 []*ast.Term
 				for _, v := range r0 {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp43384 [][2]*ast.Term
+					var tmp63597 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -6533,15 +6533,15 @@ func registerXAUTOCLAIM(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp43384 = append(tmp43384, [2]*ast.Term{k, v})
+						tmp63597 = append(tmp63597, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp43384...)
+					termValues := ast.ObjectTerm(tmp63597...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp71325 = append(tmp71325, term)
+					tmp28630 = append(tmp28630, term)
 				}
-				tr0 := ast.ArrayTerm(tmp71325...)
+				tr0 := ast.ArrayTerm(tmp28630...)
 				tr1 := ast.StringTerm(r1)
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -6578,12 +6578,12 @@ func registerXAUTOCLAIMJUSTID(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp18054 []*ast.Term
+				var tmp17055 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp18054 = append(tmp18054, term)
+					tmp17055 = append(tmp17055, term)
 				}
-				tr0 := ast.ArrayTerm(tmp18054...)
+				tr0 := ast.ArrayTerm(tmp17055...)
 				tr1 := ast.StringTerm(r1)
 				return ast.ArrayTerm(tr0, tr1), nil
 
@@ -6870,7 +6870,7 @@ func registerXINFOGROUPS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp17196 []*ast.Term
+				var tmp26843 []*ast.Term
 				for _, v := range r0 {
 
 					termName := ast.StringTerm(v.Name)
@@ -6883,9 +6883,9 @@ func registerXINFOGROUPS(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("Consumers"), termConsumers}, [2]*ast.Term{ast.StringTerm("Pending"), termPending}, [2]*ast.Term{ast.StringTerm("LastDeliveredID"), termLastDeliveredID})
 
-					tmp17196 = append(tmp17196, term)
+					tmp26843 = append(tmp26843, term)
 				}
-				term := ast.ArrayTerm(tmp17196...)
+				term := ast.ArrayTerm(tmp26843...)
 
 				return term, nil
 
@@ -6934,7 +6934,7 @@ func registerXINFOSTREAM(m *RedisManager) {
 
 				termFirstEntryID := ast.StringTerm(r0.FirstEntry.ID)
 
-				var tmp25828 [][2]*ast.Term
+				var tmp26677 [][2]*ast.Term
 				for key, value := range r0.FirstEntry.Values {
 					k := ast.StringTerm(key)
 
@@ -6943,15 +6943,15 @@ func registerXINFOSTREAM(m *RedisManager) {
 						v = ast.StringTerm(s)
 					}
 
-					tmp25828 = append(tmp25828, [2]*ast.Term{k, v})
+					tmp26677 = append(tmp26677, [2]*ast.Term{k, v})
 				}
-				termFirstEntryValues := ast.ObjectTerm(tmp25828...)
+				termFirstEntryValues := ast.ObjectTerm(tmp26677...)
 
 				termFirstEntry := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termFirstEntryID}, [2]*ast.Term{ast.StringTerm("Values"), termFirstEntryValues})
 
 				termLastEntryID := ast.StringTerm(r0.LastEntry.ID)
 
-				var tmp53271 [][2]*ast.Term
+				var tmp82198 [][2]*ast.Term
 				for key, value := range r0.LastEntry.Values {
 					k := ast.StringTerm(key)
 
@@ -6960,9 +6960,9 @@ func registerXINFOSTREAM(m *RedisManager) {
 						v = ast.StringTerm(s)
 					}
 
-					tmp53271 = append(tmp53271, [2]*ast.Term{k, v})
+					tmp82198 = append(tmp82198, [2]*ast.Term{k, v})
 				}
-				termLastEntryValues := ast.ObjectTerm(tmp53271...)
+				termLastEntryValues := ast.ObjectTerm(tmp82198...)
 
 				termLastEntry := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termLastEntryID}, [2]*ast.Term{ast.StringTerm("Values"), termLastEntryValues})
 
@@ -7016,12 +7016,12 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 
 				termLastGeneratedID := ast.StringTerm(r0.LastGeneratedID)
 
-				var tmp41919 []*ast.Term
+				var tmp62098 []*ast.Term
 				for _, v := range r0.Entries {
 
 					termID := ast.StringTerm(v.ID)
 
-					var tmp68763 [][2]*ast.Term
+					var tmp84155 [][2]*ast.Term
 					for key, value := range v.Values {
 						k := ast.StringTerm(key)
 
@@ -7030,17 +7030,17 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 							v = ast.StringTerm(s)
 						}
 
-						tmp68763 = append(tmp68763, [2]*ast.Term{k, v})
+						tmp84155 = append(tmp84155, [2]*ast.Term{k, v})
 					}
-					termValues := ast.ObjectTerm(tmp68763...)
+					termValues := ast.ObjectTerm(tmp84155...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Values"), termValues})
 
-					tmp41919 = append(tmp41919, term)
+					tmp62098 = append(tmp62098, term)
 				}
-				termEntries := ast.ArrayTerm(tmp41919...)
+				termEntries := ast.ArrayTerm(tmp62098...)
 
-				var tmp69581 []*ast.Term
+				var tmp82792 []*ast.Term
 				for _, v := range r0.Groups {
 
 					termName := ast.StringTerm(v.Name)
@@ -7049,7 +7049,7 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 
 					termPelCount := ast.IntNumberTerm(int(v.PelCount))
 
-					var tmp55570 []*ast.Term
+					var tmp60974 []*ast.Term
 					for _, v := range v.Pending {
 
 						termID := ast.StringTerm(v.ID)
@@ -7062,11 +7062,11 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Consumer"), termConsumer}, [2]*ast.Term{ast.StringTerm("DeliveryTime"), termDeliveryTime}, [2]*ast.Term{ast.StringTerm("DeliveryCount"), termDeliveryCount})
 
-						tmp55570 = append(tmp55570, term)
+						tmp60974 = append(tmp60974, term)
 					}
-					termPending := ast.ArrayTerm(tmp55570...)
+					termPending := ast.ArrayTerm(tmp60974...)
 
-					var tmp35105 []*ast.Term
+					var tmp77241 []*ast.Term
 					for _, v := range v.Consumers {
 
 						termName := ast.StringTerm(v.Name)
@@ -7075,7 +7075,7 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 
 						termPelCount := ast.IntNumberTerm(int(v.PelCount))
 
-						var tmp93830 []*ast.Term
+						var tmp59332 []*ast.Term
 						for _, v := range v.Pending {
 
 							termID := ast.StringTerm(v.ID)
@@ -7086,21 +7086,21 @@ func registerXINFOSTREAMFULL(m *RedisManager) {
 
 							term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("DeliveryTime"), termDeliveryTime}, [2]*ast.Term{ast.StringTerm("DeliveryCount"), termDeliveryCount})
 
-							tmp93830 = append(tmp93830, term)
+							tmp59332 = append(tmp59332, term)
 						}
-						termPending := ast.ArrayTerm(tmp93830...)
+						termPending := ast.ArrayTerm(tmp59332...)
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("SeenTime"), termSeenTime}, [2]*ast.Term{ast.StringTerm("PelCount"), termPelCount}, [2]*ast.Term{ast.StringTerm("Pending"), termPending})
 
-						tmp35105 = append(tmp35105, term)
+						tmp77241 = append(tmp77241, term)
 					}
-					termConsumers := ast.ArrayTerm(tmp35105...)
+					termConsumers := ast.ArrayTerm(tmp77241...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("LastDeliveredID"), termLastDeliveredID}, [2]*ast.Term{ast.StringTerm("PelCount"), termPelCount}, [2]*ast.Term{ast.StringTerm("Pending"), termPending}, [2]*ast.Term{ast.StringTerm("Consumers"), termConsumers})
 
-					tmp69581 = append(tmp69581, term)
+					tmp82792 = append(tmp82792, term)
 				}
-				termGroups := ast.ArrayTerm(tmp69581...)
+				termGroups := ast.ArrayTerm(tmp82792...)
 
 				term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Length"), termLength}, [2]*ast.Term{ast.StringTerm("RadixTreeKeys"), termRadixTreeKeys}, [2]*ast.Term{ast.StringTerm("RadixTreeNodes"), termRadixTreeNodes}, [2]*ast.Term{ast.StringTerm("LastGeneratedID"), termLastGeneratedID}, [2]*ast.Term{ast.StringTerm("Entries"), termEntries}, [2]*ast.Term{ast.StringTerm("Groups"), termGroups})
 
@@ -7144,7 +7144,7 @@ func registerXINFOCONSUMERS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp90808 []*ast.Term
+				var tmp47619 []*ast.Term
 				for _, v := range r0 {
 
 					termName := ast.StringTerm(v.Name)
@@ -7155,9 +7155,9 @@ func registerXINFOCONSUMERS(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("Pending"), termPending}, [2]*ast.Term{ast.StringTerm("Idle"), termIdle})
 
-					tmp90808 = append(tmp90808, term)
+					tmp47619 = append(tmp47619, term)
 				}
-				term := ast.ArrayTerm(tmp90808...)
+				term := ast.ArrayTerm(tmp47619...)
 
 				return term, nil
 
@@ -7892,12 +7892,12 @@ func registerZINTER(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp57872 []*ast.Term
+				var tmp63541 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp57872 = append(tmp57872, term)
+					tmp63541 = append(tmp63541, term)
 				}
-				term := ast.ArrayTerm(tmp57872...)
+				term := ast.ArrayTerm(tmp63541...)
 
 				return term, nil
 
@@ -7934,7 +7934,7 @@ func registerZINTERWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp03910 []*ast.Term
+				var tmp05773 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -7946,9 +7946,9 @@ func registerZINTERWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp03910 = append(tmp03910, term)
+					tmp05773 = append(tmp05773, term)
 				}
-				term := ast.ArrayTerm(tmp03910...)
+				term := ast.ArrayTerm(tmp05773...)
 
 				return term, nil
 
@@ -8030,12 +8030,12 @@ func registerZMSCORE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp96171 []*ast.Term
+				var tmp38877 []*ast.Term
 				for _, v := range r0 {
 					term := ast.FloatNumberTerm(float64(v))
-					tmp96171 = append(tmp96171, term)
+					tmp38877 = append(tmp38877, term)
 				}
-				term := ast.ArrayTerm(tmp96171...)
+				term := ast.ArrayTerm(tmp38877...)
 
 				return term, nil
 
@@ -8077,7 +8077,7 @@ func registerZPOPMAX(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp48128 []*ast.Term
+				var tmp96413 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8089,9 +8089,9 @@ func registerZPOPMAX(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp48128 = append(tmp48128, term)
+					tmp96413 = append(tmp96413, term)
 				}
-				term := ast.ArrayTerm(tmp48128...)
+				term := ast.ArrayTerm(tmp96413...)
 
 				return term, nil
 
@@ -8133,7 +8133,7 @@ func registerZPOPMIN(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp99286 []*ast.Term
+				var tmp09279 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8145,9 +8145,9 @@ func registerZPOPMIN(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp99286 = append(tmp99286, term)
+					tmp09279 = append(tmp09279, term)
 				}
-				term := ast.ArrayTerm(tmp99286...)
+				term := ast.ArrayTerm(tmp09279...)
 
 				return term, nil
 
@@ -8194,12 +8194,12 @@ func registerZRANGE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp71307 []*ast.Term
+				var tmp35322 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp71307 = append(tmp71307, term)
+					tmp35322 = append(tmp35322, term)
 				}
-				term := ast.ArrayTerm(tmp71307...)
+				term := ast.ArrayTerm(tmp35322...)
 
 				return term, nil
 
@@ -8246,7 +8246,7 @@ func registerZRANGEWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp52682 []*ast.Term
+				var tmp73783 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8258,9 +8258,9 @@ func registerZRANGEWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp52682 = append(tmp52682, term)
+					tmp73783 = append(tmp73783, term)
 				}
-				term := ast.ArrayTerm(tmp52682...)
+				term := ast.ArrayTerm(tmp73783...)
 
 				return term, nil
 
@@ -8302,12 +8302,12 @@ func registerZRANGEBYSCORE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp15820 []*ast.Term
+				var tmp87102 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp15820 = append(tmp15820, term)
+					tmp87102 = append(tmp87102, term)
 				}
-				term := ast.ArrayTerm(tmp15820...)
+				term := ast.ArrayTerm(tmp87102...)
 
 				return term, nil
 
@@ -8349,12 +8349,12 @@ func registerZRANGEBYLEX(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp10847 []*ast.Term
+				var tmp47641 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp10847 = append(tmp10847, term)
+					tmp47641 = append(tmp47641, term)
 				}
-				term := ast.ArrayTerm(tmp10847...)
+				term := ast.ArrayTerm(tmp47641...)
 
 				return term, nil
 
@@ -8396,7 +8396,7 @@ func registerZRANGEBYSCOREWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp10678 []*ast.Term
+				var tmp98721 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8408,9 +8408,9 @@ func registerZRANGEBYSCOREWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp10678 = append(tmp10678, term)
+					tmp98721 = append(tmp98721, term)
 				}
-				term := ast.ArrayTerm(tmp10678...)
+				term := ast.ArrayTerm(tmp98721...)
 
 				return term, nil
 
@@ -8447,12 +8447,12 @@ func registerZRANGEARGS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp43426 []*ast.Term
+				var tmp73464 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp43426 = append(tmp43426, term)
+					tmp73464 = append(tmp73464, term)
 				}
-				term := ast.ArrayTerm(tmp43426...)
+				term := ast.ArrayTerm(tmp73464...)
 
 				return term, nil
 
@@ -8489,7 +8489,7 @@ func registerZRANGEARGSWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp17125 []*ast.Term
+				var tmp48747 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8501,9 +8501,9 @@ func registerZRANGEARGSWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp17125 = append(tmp17125, term)
+					tmp48747 = append(tmp48747, term)
 				}
-				term := ast.ArrayTerm(tmp17125...)
+				term := ast.ArrayTerm(tmp48747...)
 
 				return term, nil
 
@@ -8805,12 +8805,12 @@ func registerZREVRANGE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp85431 []*ast.Term
+				var tmp88679 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp85431 = append(tmp85431, term)
+					tmp88679 = append(tmp88679, term)
 				}
-				term := ast.ArrayTerm(tmp85431...)
+				term := ast.ArrayTerm(tmp88679...)
 
 				return term, nil
 
@@ -8857,7 +8857,7 @@ func registerZREVRANGEWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp93199 []*ast.Term
+				var tmp77982 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -8869,9 +8869,9 @@ func registerZREVRANGEWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp93199 = append(tmp93199, term)
+					tmp77982 = append(tmp77982, term)
 				}
-				term := ast.ArrayTerm(tmp93199...)
+				term := ast.ArrayTerm(tmp77982...)
 
 				return term, nil
 
@@ -8913,12 +8913,12 @@ func registerZREVRANGEBYSCORE(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp78393 []*ast.Term
+				var tmp05485 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp78393 = append(tmp78393, term)
+					tmp05485 = append(tmp05485, term)
 				}
-				term := ast.ArrayTerm(tmp78393...)
+				term := ast.ArrayTerm(tmp05485...)
 
 				return term, nil
 
@@ -8960,12 +8960,12 @@ func registerZREVRANGEBYLEX(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp54585 []*ast.Term
+				var tmp16561 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp54585 = append(tmp54585, term)
+					tmp16561 = append(tmp16561, term)
 				}
-				term := ast.ArrayTerm(tmp54585...)
+				term := ast.ArrayTerm(tmp16561...)
 
 				return term, nil
 
@@ -9007,7 +9007,7 @@ func registerZREVRANGEBYSCOREWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp07439 []*ast.Term
+				var tmp72482 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -9019,9 +9019,9 @@ func registerZREVRANGEBYSCOREWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp07439 = append(tmp07439, term)
+					tmp72482 = append(tmp72482, term)
 				}
-				term := ast.ArrayTerm(tmp07439...)
+				term := ast.ArrayTerm(tmp72482...)
 
 				return term, nil
 
@@ -9178,12 +9178,12 @@ func registerZUNION(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp98312 []*ast.Term
+				var tmp51014 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp98312 = append(tmp98312, term)
+					tmp51014 = append(tmp51014, term)
 				}
-				term := ast.ArrayTerm(tmp98312...)
+				term := ast.ArrayTerm(tmp51014...)
 
 				return term, nil
 
@@ -9220,7 +9220,7 @@ func registerZUNIONWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp02537 []*ast.Term
+				var tmp69586 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -9232,9 +9232,9 @@ func registerZUNIONWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp02537 = append(tmp02537, term)
+					tmp69586 = append(tmp69586, term)
 				}
-				term := ast.ArrayTerm(tmp02537...)
+				term := ast.ArrayTerm(tmp69586...)
 
 				return term, nil
 
@@ -9281,12 +9281,12 @@ func registerZRANDMEMBER(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp40545 []*ast.Term
+				var tmp69802 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp40545 = append(tmp40545, term)
+					tmp69802 = append(tmp69802, term)
 				}
-				term := ast.ArrayTerm(tmp40545...)
+				term := ast.ArrayTerm(tmp69802...)
 
 				return term, nil
 
@@ -9323,12 +9323,12 @@ func registerZDIFF(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp85477 []*ast.Term
+				var tmp76712 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp85477 = append(tmp85477, term)
+					tmp76712 = append(tmp76712, term)
 				}
-				term := ast.ArrayTerm(tmp85477...)
+				term := ast.ArrayTerm(tmp76712...)
 
 				return term, nil
 
@@ -9365,7 +9365,7 @@ func registerZDIFFWITHSCORES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp82067 []*ast.Term
+				var tmp91312 []*ast.Term
 				for _, v := range r0 {
 
 					termScore := ast.FloatNumberTerm(float64(v.Score))
@@ -9377,9 +9377,9 @@ func registerZDIFFWITHSCORES(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Score"), termScore}, [2]*ast.Term{ast.StringTerm("Member"), termMember})
 
-					tmp82067 = append(tmp82067, term)
+					tmp91312 = append(tmp91312, term)
 				}
-				term := ast.ArrayTerm(tmp82067...)
+				term := ast.ArrayTerm(tmp91312...)
 
 				return term, nil
 
@@ -9796,7 +9796,7 @@ func registerCONFIGGET(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp75339 []*ast.Term
+				var tmp04047 []*ast.Term
 				for _, v := range r0 {
 
 					term := ast.NullTerm()
@@ -9804,9 +9804,9 @@ func registerCONFIGGET(m *RedisManager) {
 						term = ast.StringTerm(s)
 					}
 
-					tmp75339 = append(tmp75339, term)
+					tmp04047 = append(tmp04047, term)
 				}
-				term := ast.ArrayTerm(tmp75339...)
+				term := ast.ArrayTerm(tmp04047...)
 
 				return term, nil
 
@@ -10581,12 +10581,12 @@ func registerSCRIPTEXISTS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp90224 []*ast.Term
+				var tmp28016 []*ast.Term
 				for _, v := range r0 {
 					term := ast.BooleanTerm(v)
-					tmp90224 = append(tmp90224, term)
+					tmp28016 = append(tmp28016, term)
 				}
-				term := ast.ArrayTerm(tmp90224...)
+				term := ast.ArrayTerm(tmp28016...)
 
 				return term, nil
 
@@ -10758,12 +10758,12 @@ func registerPUBSUBCHANNELS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp94118 []*ast.Term
+				var tmp68232 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp94118 = append(tmp94118, term)
+					tmp68232 = append(tmp68232, term)
 				}
-				term := ast.ArrayTerm(tmp94118...)
+				term := ast.ArrayTerm(tmp68232...)
 
 				return term, nil
 
@@ -10800,13 +10800,13 @@ func registerPUBSUBNUMSUB(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp41170 [][2]*ast.Term
+				var tmp91137 [][2]*ast.Term
 				for key, value := range r0 {
 					k := ast.StringTerm(key)
 					v := ast.IntNumberTerm(int(value))
-					tmp41170 = append(tmp41170, [2]*ast.Term{k, v})
+					tmp91137 = append(tmp91137, [2]*ast.Term{k, v})
 				}
-				term := ast.ObjectTerm(tmp41170...)
+				term := ast.ObjectTerm(tmp91137...)
 
 				return term, nil
 
@@ -10868,14 +10868,14 @@ func registerCLUSTERSLOTS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp46984 []*ast.Term
+				var tmp67290 []*ast.Term
 				for _, v := range r0 {
 
 					termStart := ast.IntNumberTerm(int(v.Start))
 
 					termEnd := ast.IntNumberTerm(int(v.End))
 
-					var tmp38775 []*ast.Term
+					var tmp85458 []*ast.Term
 					for _, v := range v.Nodes {
 
 						termID := ast.StringTerm(v.ID)
@@ -10884,15 +10884,15 @@ func registerCLUSTERSLOTS(m *RedisManager) {
 
 						term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("ID"), termID}, [2]*ast.Term{ast.StringTerm("Addr"), termAddr})
 
-						tmp38775 = append(tmp38775, term)
+						tmp85458 = append(tmp85458, term)
 					}
-					termNodes := ast.ArrayTerm(tmp38775...)
+					termNodes := ast.ArrayTerm(tmp85458...)
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Start"), termStart}, [2]*ast.Term{ast.StringTerm("End"), termEnd}, [2]*ast.Term{ast.StringTerm("Nodes"), termNodes})
 
-					tmp46984 = append(tmp46984, term)
+					tmp67290 = append(tmp67290, term)
 				}
-				term := ast.ArrayTerm(tmp46984...)
+				term := ast.ArrayTerm(tmp67290...)
 
 				return term, nil
 
@@ -11199,12 +11199,12 @@ func registerCLUSTERGETKEYSINSLOT(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp05818 []*ast.Term
+				var tmp25918 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp05818 = append(tmp05818, term)
+					tmp25918 = append(tmp25918, term)
 				}
-				term := ast.ArrayTerm(tmp05818...)
+				term := ast.ArrayTerm(tmp25918...)
 
 				return term, nil
 
@@ -11416,12 +11416,12 @@ func registerCLUSTERSLAVES(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp88797 []*ast.Term
+				var tmp50236 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp88797 = append(tmp88797, term)
+					tmp50236 = append(tmp50236, term)
 				}
-				term := ast.ArrayTerm(tmp88797...)
+				term := ast.ArrayTerm(tmp50236...)
 
 				return term, nil
 
@@ -11608,10 +11608,10 @@ func registerGEOPOS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp66652 []*ast.Term
+				var tmp96520 []*ast.Term
 				for _, v := range r0 {
 					if v == nil {
-						tmp66652 = append(tmp66652, ast.NullTerm())
+						tmp96520 = append(tmp96520, ast.NullTerm())
 						continue
 					}
 
@@ -11621,9 +11621,9 @@ func registerGEOPOS(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Longitude"), termLongitude}, [2]*ast.Term{ast.StringTerm("Latitude"), termLatitude})
 
-					tmp66652 = append(tmp66652, term)
+					tmp96520 = append(tmp96520, term)
 				}
-				term := ast.ArrayTerm(tmp66652...)
+				term := ast.ArrayTerm(tmp96520...)
 
 				return term, nil
 
@@ -11675,7 +11675,7 @@ func registerGEORADIUS(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp51335 []*ast.Term
+				var tmp90486 []*ast.Term
 				for _, v := range r0 {
 
 					termName := ast.StringTerm(v.Name)
@@ -11690,9 +11690,9 @@ func registerGEORADIUS(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("Longitude"), termLongitude}, [2]*ast.Term{ast.StringTerm("Latitude"), termLatitude}, [2]*ast.Term{ast.StringTerm("Dist"), termDist}, [2]*ast.Term{ast.StringTerm("GeoHash"), termGeoHash})
 
-					tmp51335 = append(tmp51335, term)
+					tmp90486 = append(tmp90486, term)
 				}
-				term := ast.ArrayTerm(tmp51335...)
+				term := ast.ArrayTerm(tmp90486...)
 
 				return term, nil
 
@@ -11789,7 +11789,7 @@ func registerGEORADIUSBYMEMBER(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp72292 []*ast.Term
+				var tmp23294 []*ast.Term
 				for _, v := range r0 {
 
 					termName := ast.StringTerm(v.Name)
@@ -11804,9 +11804,9 @@ func registerGEORADIUSBYMEMBER(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("Longitude"), termLongitude}, [2]*ast.Term{ast.StringTerm("Latitude"), termLatitude}, [2]*ast.Term{ast.StringTerm("Dist"), termDist}, [2]*ast.Term{ast.StringTerm("GeoHash"), termGeoHash})
 
-					tmp72292 = append(tmp72292, term)
+					tmp23294 = append(tmp23294, term)
 				}
-				term := ast.ArrayTerm(tmp72292...)
+				term := ast.ArrayTerm(tmp23294...)
 
 				return term, nil
 
@@ -11893,12 +11893,12 @@ func registerGEOSEARCH(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp55134 []*ast.Term
+				var tmp68977 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp55134 = append(tmp55134, term)
+					tmp68977 = append(tmp68977, term)
 				}
-				term := ast.ArrayTerm(tmp55134...)
+				term := ast.ArrayTerm(tmp68977...)
 
 				return term, nil
 
@@ -11940,7 +11940,7 @@ func registerGEOSEARCHLOCATION(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp07617 []*ast.Term
+				var tmp92884 []*ast.Term
 				for _, v := range r0 {
 
 					termName := ast.StringTerm(v.Name)
@@ -11955,9 +11955,9 @@ func registerGEOSEARCHLOCATION(m *RedisManager) {
 
 					term := ast.ObjectTerm([2]*ast.Term{ast.StringTerm("Name"), termName}, [2]*ast.Term{ast.StringTerm("Longitude"), termLongitude}, [2]*ast.Term{ast.StringTerm("Latitude"), termLatitude}, [2]*ast.Term{ast.StringTerm("Dist"), termDist}, [2]*ast.Term{ast.StringTerm("GeoHash"), termGeoHash})
 
-					tmp07617 = append(tmp07617, term)
+					tmp92884 = append(tmp92884, term)
 				}
-				term := ast.ArrayTerm(tmp07617...)
+				term := ast.ArrayTerm(tmp92884...)
 
 				return term, nil
 
@@ -12094,12 +12094,12 @@ func registerGEOHASH(m *RedisManager) {
 				return ast.NullTerm(), nil
 			case nil:
 
-				var tmp66970 []*ast.Term
+				var tmp07073 []*ast.Term
 				for _, v := range r0 {
 					term := ast.StringTerm(v)
-					tmp66970 = append(tmp66970, term)
+					tmp07073 = append(tmp07073, term)
 				}
-				term := ast.ArrayTerm(tmp66970...)
+				term := ast.ArrayTerm(tmp07073...)
 
 				return term, nil
 

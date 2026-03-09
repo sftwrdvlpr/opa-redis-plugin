@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/opa/plugins"
 	"github.com/open-policy-agent/opa/util"
 
-	"github.com/tibotix/opa-redis-plugin/redisManager"
+	"github.com/sftwrdvlpr/opa-redis-plugin/redisManager"
 
 	"github.com/go-redis/redis/v8"
 )

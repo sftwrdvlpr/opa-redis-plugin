@@ -774,7 +774,7 @@ def main():
         print("""
 import (
     "time"
-    "github.com/tibotix/opa-redis-plugin/utils"
+    "github.com/sftwrdvlpr/opa-redis-plugin/utils"
 
     "github.com/go-redis/redis/v8"
     "github.com/open-policy-agent/opa/ast"

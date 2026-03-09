@@ -5,7 +5,7 @@ import (
 
 	"github.com/open-policy-agent/opa/cmd"
 	"github.com/open-policy-agent/opa/runtime"
-	"github.com/tibotix/opa-redis-plugin/plugin"
+	"github.com/sftwrdvlpr/opa-redis-plugin/plugin"
 )
 
 func main() {

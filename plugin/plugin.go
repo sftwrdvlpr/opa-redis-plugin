@@ -3,8 +3,8 @@ package plugin
 import (
 	"github.com/open-policy-agent/opa/plugins"
 
-	"github.com/tibotix/opa-redis-plugin/internal"
-	"github.com/tibotix/opa-redis-plugin/redisManager"
+	"github.com/sftwrdvlpr/opa-redis-plugin/internal"
+	"github.com/sftwrdvlpr/opa-redis-plugin/redisManager"
 )
 
 // Factory defines the interface OPA uses to instantiate a plugin.
