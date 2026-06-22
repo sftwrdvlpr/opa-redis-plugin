@@ -87,7 +87,8 @@ type Compiler struct {
 	fsys                         fs.FS                      // file system to use when loading paths
 	ns                           string
 	regoVersion                  ast.RegoVersion
-	followSymlinks               bool // optionally follow symlinks in the bundle directory when building the bundle
+	followSymlinks               bool      // optionally follow symlinks in the bundle directory when building the bundle
+	externalRefs                 []ast.Ref // external entrypoints provided dynamically
 }
 
 // New returns a new compiler instance that can be invoked.
@@ -176,6 +177,12 @@ func (c *Compiler) WithDebug(sink io.Writer) *Compiler {
 // erased at compile-time.
 func (c *Compiler) WithEnablePrintStatements(yes bool) *Compiler {
 	c.enablePrintStatements = yes
+	return c
+}
+
+// WithExternalRefs sets the external entrypoints that are provided dynamically.
+func (c *Compiler) WithExternalRefs(refs []ast.Ref) *Compiler {
+	c.externalRefs = refs
 	return c
 }
 
@@ -482,16 +489,18 @@ func (c *Compiler) initBundle(usePath bool) error {
 	// we can track read and parse times.
 
 	load, err := initload.LoadPathsForRegoVersion(
-		c.regoVersion,
+		ast.ParserOptions{
+			RegoVersion:       c.regoVersion,
+			ProcessAnnotation: c.useRegoAnnotationEntrypoints,
+			Capabilities:      c.capabilities,
+		},
 		c.paths,
 		c.filter,
 		c.asBundle,
 		c.bvc,
 		false,
 		c.enableBundleLazyLoadingMode,
-		c.useRegoAnnotationEntrypoints,
 		c.followSymlinks,
-		c.capabilities,
 		c.fsys)
 	if err != nil {
 		return fmt.Errorf("load error: %w", err)
@@ -607,7 +616,7 @@ func (c *Compiler) compilePlan(context.Context) error {
 
 		extras := ast.NewSet()
 		for rule := range deps {
-			extras.Add(ast.NewTerm(rule.Path()))
+			extras.Add(ast.NewTerm(rule.Module.Package.Path.Extend(rule.Head.Ref().GroundPrefix())))
 		}
 
 		sorted := extras.Sorted()
@@ -781,6 +790,27 @@ func findAnnotationsForTerm(term *ast.Term, annotationRefs []*ast.AnnotationsRef
 	return result
 }
 
+// pruneAnnotationsAndComments filters out annotations and their associated comments based on a predicate.
+// It returns the kept annotations and kept comments.
+func pruneAnnotationsAndComments(
+	module *ast.Module,
+	shouldDiscard func(*ast.Annotations) bool,
+) ([]*ast.Annotations, []*ast.Comment) {
+	keepAnnotations := slices.DeleteFunc(slices.Clone(module.Annotations), shouldDiscard)
+
+	var keepComments []*ast.Comment
+	for _, comment := range module.Comments {
+		if slices.ContainsFunc(keepAnnotations, func(a *ast.Annotations) bool {
+			return comment.Location.Row >= a.Location.Row &&
+				comment.Location.Row <= a.EndLoc().Row
+		}) {
+			keepComments = append(keepComments, comment)
+		}
+	}
+
+	return keepAnnotations, keepComments
+}
+
 // pruneBundleEntrypoints will modify modules in the provided bundle to remove
 // rules matching the entrypoints along with injecting import statements to
 // preserve their ability to compile.
@@ -796,7 +826,7 @@ func pruneBundleEntrypoints(b *bundle.Bundle, entrypointrefs []*ast.Term) error 
 			// Drop any rules that match the entrypoint path.
 			var rules []*ast.Rule
 			for _, rule := range mf.Parsed.Rules {
-				rulePath := rule.Path()
+				rulePath := rule.Module.Package.Path.Extend(rule.Head.Ref().GroundPrefix())
 				if !rulePath.Equal(entrypoint.Value) {
 					rules = append(rules, rule)
 				} else {
@@ -816,35 +846,10 @@ func pruneBundleEntrypoints(b *bundle.Bundle, entrypointrefs []*ast.Term) error 
 				}
 			}
 
-			// Drop any Annotations for rules matching the entrypoint path
-			var annotations []*ast.Annotations
-			var prunedAnnotations []*ast.Annotations
-			for _, annotation := range mf.Parsed.Annotations {
-				p := annotation.GetTargetPath()
-				// We prune annotations of dropped rules, but not packages, as the Rego file is always retained
-				if p.Equal(entrypoint.Value) && !mf.Parsed.Package.Path.Equal(entrypoint.Value) {
-					prunedAnnotations = append(prunedAnnotations, annotation)
-				} else {
-					annotations = append(annotations, annotation)
-				}
-			}
-
-			// Drop comments associated with pruned annotations
-			var comments []*ast.Comment
-			for _, comment := range mf.Parsed.Comments {
-				pruned := false
-				for _, annotation := range prunedAnnotations {
-					if comment.Location.Row >= annotation.Location.Row &&
-						comment.Location.Row <= annotation.EndLoc().Row {
-						pruned = true
-						break
-					}
-				}
-
-				if !pruned {
-					comments = append(comments, comment)
-				}
-			}
+			// Prune annotations and comments for entrypoint rules
+			annotations, comments := pruneAnnotationsAndComments(mf.Parsed, func(annotation *ast.Annotations) bool {
+				return annotation.GetTargetPath().Equal(entrypoint.Value)
+			})
 
 			// If any rules or annotations were dropped update the module accordingly
 			if len(rules) != len(mf.Parsed.Rules) || len(comments) != len(mf.Parsed.Comments) {
@@ -1215,7 +1220,15 @@ func (*optimizer) merge(a, b []bundle.ModuleFile) []bundle.ModuleFile {
 		}
 
 		if len(keep) > 0 {
+			keepAnnotations, keepComments := pruneAnnotationsAndComments(a[i].Parsed, func(annotation *ast.Annotations) bool {
+				return discarded.Contains(ast.NewTerm(annotation.GetTargetPath()))
+			})
+
 			a[i].Parsed.Rules = keep
+			a[i].Parsed.Annotations = keepAnnotations
+			a[i].Parsed.Comments = keepComments
+			// Remove the original raw source, we're editing the AST
+			// directly, so it won't be in sync anymore.
 			a[i].Raw = nil
 			b = append(b, a[i])
 		}

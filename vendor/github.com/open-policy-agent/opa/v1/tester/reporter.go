@@ -43,14 +43,18 @@ func (r PrettyReporter) println(a ...any) {
 }
 
 // Report prints the test report to the reporter's output.
+// Results are streamed as they arrive from the channel: each test line is
+// printed immediately, and the FAILURES detail section and summary are
+// printed after all results have been received.
 func (r PrettyReporter) Report(ch chan *Result) error {
 
 	dirty := false
 	var pass, fail, skip, errs int
-	results := make([]*Result, 0, len(ch))
 	var failures []*Result
+	var lastFile string
 
 	for tr := range ch {
+		// Count results.
 		if tr.Skip {
 			skip++
 		} else if tr.Error != nil {
@@ -79,10 +83,49 @@ func (r PrettyReporter) Report(ch chan *Result) error {
 				}
 			}
 		}
-		results = append(results, tr)
+
+		// Stream: print each result immediately.
+		if tr.Pass() && r.BenchmarkResults {
+			dirty = true
+			r.println(r.fmtBenchmark(tr))
+		} else if r.Verbose || !tr.Pass() {
+			if tr.Location != nil {
+				if lastFile != "" && lastFile != tr.Location.File {
+					r.println()
+				}
+				_, _ = fmt.Fprintf(r.Output, "%s:%d:\n", tr.Location.File, tr.Location.Row)
+				lastFile = tr.Location.File
+			}
+
+			dirty = true
+			r.println(tr.string(false))
+
+			w := newIndentingWriter(r.Output)
+			if srs := tr.SubResults; len(srs) > 0 {
+				for fullName, sr := range srs.Iter {
+					if sr.Fail || r.Verbose {
+						_, _ = fmt.Fprintf(w, "%s%s\n",
+							strings.Repeat("  ", len(fullName)-1),
+							sr.String(),
+						)
+					}
+				}
+			}
+
+			if len(tr.Output) > 0 {
+				r.println()
+				_, _ = fmt.Fprintln(newIndentingWriter(r.Output), strings.TrimSpace(string(tr.Output)))
+				r.println()
+			}
+		}
+		if tr.Error != nil {
+			_, _ = fmt.Fprintf(r.Output, "  %v\n", tr.Error)
+		}
 	}
 
+	// Print failure details after all results have been streamed.
 	if fail > 0 && (r.Verbose || r.FailureLine) {
+		r.hl()
 		r.println("FAILURES")
 		r.hl()
 
@@ -124,51 +167,6 @@ func (r PrettyReporter) Report(ch chan *Result) error {
 			}
 
 			r.println()
-		}
-
-		r.println("SUMMARY")
-		r.hl()
-	}
-
-	// Report individual tests.
-	var lastFile string
-	for _, tr := range results {
-
-		if tr.Pass() && r.BenchmarkResults {
-			dirty = true
-			r.println(r.fmtBenchmark(tr))
-		} else if r.Verbose || !tr.Pass() {
-			if tr.Location != nil {
-				if lastFile != "" && lastFile != tr.Location.File {
-					r.println("")
-				}
-				_, _ = fmt.Fprintf(r.Output, "%s:%d:\n", tr.Location.File, tr.Location.Row)
-				lastFile = tr.Location.File
-			}
-
-			dirty = true
-			r.println(tr.string(false))
-
-			w := newIndentingWriter(r.Output)
-			if srs := tr.SubResults; len(srs) > 0 {
-				for fullName, sr := range srs.Iter {
-					if sr.Fail || r.Verbose {
-						_, _ = fmt.Fprintf(w, "%s%s\n",
-							strings.Repeat("  ", len(fullName)-1),
-							sr.String(),
-						)
-					}
-				}
-			}
-
-			if len(tr.Output) > 0 {
-				r.println()
-				_, _ = fmt.Fprintln(newIndentingWriter(r.Output), strings.TrimSpace(string(tr.Output)))
-				r.println()
-			}
-		}
-		if tr.Error != nil {
-			_, _ = fmt.Fprintf(r.Output, "  %v\n", tr.Error)
 		}
 	}
 
@@ -306,14 +304,21 @@ type JSONCoverageReporter struct {
 // Report prints the test report to the reporter's output. If any tests fail or
 // encounter errors, this function returns an error.
 func (r JSONCoverageReporter) Report(ch chan *Result) error {
+	var failures []*Result
 	for tr := range ch {
-		if !tr.Pass() {
-			if tr.Error != nil {
-				return tr.Error
-			}
-			return errors.New(tr.String())
+		if tr.Error != nil {
+			return tr.Error
+		}
+		if tr.Fail {
+			failures = append(failures, tr)
 		}
 	}
+
+	if len(failures) > 0 {
+		reportFailures(r.Output, r.Verbose, failures)
+		return errors.New(failures[0].String())
+	}
+
 	report := r.Cover.Report(r.Modules)
 
 	if report.Coverage < r.Threshold {
@@ -332,6 +337,15 @@ func (r JSONCoverageReporter) Report(ch chan *Result) error {
 	encoder := json.NewEncoder(r.Output)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(report)
+}
+
+func reportFailures(output io.Writer, verbose bool, results []*Result) {
+	ch := make(chan *Result, len(results))
+	for _, r := range results {
+		ch <- r
+	}
+	close(ch)
+	_ = PrettyReporter{Output: output, Verbose: verbose}.Report(ch)
 }
 
 type indentingWriter struct {

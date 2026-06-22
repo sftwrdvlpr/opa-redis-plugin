@@ -19,6 +19,7 @@ import (
 	"net/http/pprof"
 	"net/url"
 	"os"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,12 +29,11 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/open-policy-agent/opa/internal/json/patch"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/config"
 	"github.com/open-policy-agent/opa/v1/hooks"
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/metrics"
@@ -80,8 +80,6 @@ const (
 )
 
 const (
-	defaultMinTLSVersion = tls.VersionTLS12
-
 	// Set of handlers for use in the "handler" dimension of the duration metric.
 	PromHandlerV0Data     = "v0/data"
 	PromHandlerV1Data     = "v1/data"
@@ -132,7 +130,6 @@ type Server struct {
 	certPoolFileHash            []byte
 	minTLSVersion               uint16
 	mtx                         sync.RWMutex
-	partials                    map[string]rego.PartialResult
 	preparedEvalQueries         *cache
 	store                       storage.Store
 	manager                     *plugins.Manager
@@ -228,7 +225,6 @@ func (s *Server) Init(ctx context.Context) (*Server, error) {
 		return nil, err
 	}
 
-	s.partials = map[string]rego.PartialResult{}
 	s.preparedEvalQueries = newCache(pqMaxCacheSize)
 	s.defaultDecisionPath = s.generateDefaultDecisionPath()
 	s.manager.RegisterNDCacheTrigger(s.updateNDCache)
@@ -416,7 +412,7 @@ func (s *Server) WithMinTLSVersion(minTLSVersion uint16) *Server {
 	if slices.Contains(supportedTLSVersions, minTLSVersion) {
 		s.minTLSVersion = minTLSVersion
 	} else {
-		s.minTLSVersion = defaultMinTLSVersion
+		s.minTLSVersion = config.DefaultMinTLSVersion
 	}
 	return s
 }
@@ -437,6 +433,17 @@ func (s *Server) WithHooks(hs hooks.Hooks) *Server {
 func (s *Server) WithNDBCacheEnabled(ndbCacheEnabled bool) *Server {
 	s.ndbCacheEnabled = ndbCacheEnabled
 	return s
+}
+
+func newEvaluatedRuleTracker() *topdown.EvaluatedRuleTracker {
+	return &topdown.EvaluatedRuleTracker{}
+}
+
+func evaluatedRuleLabels(t *topdown.EvaluatedRuleTracker) []map[string]any {
+	if t == nil || len(t.Labels) == 0 {
+		return nil
+	}
+	return t.Labels
 }
 
 // WithCipherSuites sets the list of enabled TLS 1.0–1.2 cipher suites.
@@ -651,13 +658,15 @@ func (s *Server) getListener(addr string, h http.Handler, t httpListenerType) ([
 }
 
 func (s *Server) getListenerForHTTPServer(u *url.URL, h http.Handler, t httpListenerType) (Loop, httpListener, error) {
-	if s.h2cEnabled {
-		h2s := &http2.Server{}
-		h = h2c.NewHandler(h, h2s)
-	}
 	h1s := http.Server{
 		Addr:    u.Host,
 		Handler: h,
+	}
+	if s.h2cEnabled {
+		p := new(http.Protocols)
+		p.SetHTTP1(true)
+		p.SetUnencryptedHTTP2(true)
+		h1s.Protocols = p
 	}
 
 	l := newHTTPListener(&h1s, t)
@@ -691,7 +700,7 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL, h http.Handler, t httpLis
 			if s.minTLSVersion != 0 {
 				cfg.MinVersion = s.minTLSVersion
 			} else {
-				cfg.MinVersion = defaultMinTLSVersion
+				cfg.MinVersion = config.DefaultMinTLSVersion
 			}
 
 			if s.cipherSuites != nil {
@@ -718,25 +727,33 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL, h http.Handler, t httpLis
 func (s *Server) getListenerForUNIXSocket(u *url.URL, h http.Handler, t httpListenerType) (Loop, httpListener, error) {
 	socketPath := u.Host + u.Path
 
-	// Recover @ prefix for abstract Unix sockets.
+	// Recover @ prefix for abstract Unix sockets (Linux-only).
+	isAbstract := false
 	if strings.HasPrefix(u.String(), u.Scheme+"://@") {
 		socketPath = "@" + socketPath
-	} else {
+		isAbstract = runtime.GOOS == "linux"
+	}
+
+	if !isAbstract {
 		// Remove domain socket file in case it already exists.
 		os.Remove(socketPath)
 	}
 
-	if s.h2cEnabled {
-		h2s := &http2.Server{}
-		h = h2c.NewHandler(h, h2s)
-	}
 	domainSocketServer := http.Server{Handler: h}
+	if s.h2cEnabled {
+		p := new(http.Protocols)
+		p.SetHTTP1(true)
+		p.SetUnencryptedHTTP2(true)
+		domainSocketServer.Protocols = p
+	}
 	unixListener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if s.unixSocketPerm != nil {
+	// Skip chmod for abstract Unix sockets — they exist only in the
+	// kernel's socket namespace and have no filesystem path to chmod.
+	if s.unixSocketPerm != nil && !isAbstract {
 		modeVal, err := strconv.ParseUint(*s.unixSocketPerm, 8, 32)
 		if err != nil {
 			return nil, nil, err
@@ -956,6 +973,7 @@ func (s *Server) execQuery(ctx context.Context, br bundleRevisions, txn storage.
 		ndbCache = builtins.NDBCache{}
 	}
 
+	tracker := newEvaluatedRuleTracker()
 	opts := []func(*rego.Rego){
 		rego.Store(s.store),
 		rego.Transaction(txn),
@@ -973,6 +991,7 @@ func (s *Server) execQuery(ctx context.Context, br bundleRevisions, txn storage.
 		rego.EnablePrintStatements(s.manager.EnablePrintStatements()),
 		rego.DistributedTracingOpts(s.distributedTracingOpts),
 		rego.NDBuiltinCache(ndbCache),
+		rego.EvaluatedRuleTracker(tracker),
 	}
 
 	for _, r := range s.manager.GetWasmResolvers() {
@@ -985,7 +1004,7 @@ func (s *Server) execQuery(ctx context.Context, br bundleRevisions, txn storage.
 
 	output, err := rego.Eval(ctx)
 	if err != nil {
-		_ = logger.Log(ctx, txn, "", parsedQuery.String(), rawInput, input, nil, ndbCache, err, m, nil)
+		_ = logger.Log(ctx, txn, "", parsedQuery.String(), rawInput, input, nil, ndbCache, err, m, nil, nil)
 		return nil, err
 	}
 
@@ -1002,7 +1021,7 @@ func (s *Server) execQuery(ctx context.Context, br bundleRevisions, txn storage.
 	}
 
 	var x any = results.Result
-	if err := logger.Log(ctx, txn, "", parsedQuery.String(), rawInput, input, &x, ndbCache, nil, m, nil); err != nil {
+	if err := logger.Log(ctx, txn, "", parsedQuery.String(), rawInput, input, &x, ndbCache, nil, m, evaluatedRuleLabels(tracker), nil); err != nil {
 		return nil, err
 	}
 	return &results, nil
@@ -1033,7 +1052,7 @@ func getRevisions(ctx context.Context, store storage.Store, txn storage.Transact
 	br.Revisions = map[string]string{}
 
 	// Check if we still have a legacy bundle manifest in the store
-	br.LegacyRevision, err = bundle.LegacyReadRevisionFromStore(ctx, store, txn)
+	br.LegacyRevision, err = bundle.LegacyReadRevisionFromStore(ctx, store, txn) //nolint:staticcheck
 	if err != nil && !storage.IsNotFound(err) {
 		return br, err
 	}
@@ -1064,7 +1083,6 @@ func (s *Server) reload(_ context.Context, _ storage.Transaction, evt storage.Tr
 	// races--the state must be accessed _after_ a txn has been opened.
 
 	// reset some cached info
-	s.partials = map[string]rego.PartialResult{}
 	s.preparedEvalQueries = newCache(pqMaxCacheSize)
 	s.defaultDecisionPath = s.generateDefaultDecisionPath()
 	if evt.PolicyChanged() {
@@ -1139,14 +1157,14 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 
 		rego, err := s.makeRego(ctx, false, txn, input, urlPath, m, false, nil, opts)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 			writer.ErrorAuto(w, err)
 			return
 		}
 
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1154,6 +1172,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		s.preparedEvalQueries.Insert(pqID, preparedQuery)
 	}
 
+	tracker := newEvaluatedRuleTracker()
 	evalOpts := []rego.EvalOption{
 		rego.EvalTransaction(txn),
 		rego.EvalParsedInput(input),
@@ -1161,6 +1180,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		rego.EvalInterQueryBuiltinCache(s.interQueryBuiltinCache),
 		rego.EvalInterQueryBuiltinValueCache(s.interQueryBuiltinValueCache),
 		rego.EvalNDBuiltinCache(ndbCache),
+		rego.EvalEvaluatedRuleTracker(tracker),
 	}
 
 	rs, err := preparedQuery.Eval(
@@ -1172,7 +1192,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1189,7 +1209,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 			messageType = types.MsgFoundUndefinedError
 		}
 		errV1 := types.NewErrorV1(types.CodeUndefinedDocument, "%v: %v", messageType, ref)
-		if err := logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, errV1, m, nil); err != nil {
+		if err := logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, errV1, m, nil, nil); err != nil {
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1197,7 +1217,7 @@ func (s *Server) v0QueryPath(w http.ResponseWriter, r *http.Request, urlPath str
 		writer.Error(w, http.StatusNotFound, errV1)
 		return
 	}
-	err = logger.Log(ctx, txn, urlPath, "", goInput, input, &rs[0].Expressions[0].Value, ndbCache, nil, m, nil)
+	err = logger.Log(ctx, txn, urlPath, "", goInput, input, &rs[0].Expressions[0].Value, ndbCache, nil, m, evaluatedRuleLabels(tracker), nil)
 	if err != nil {
 		writer.ErrorAuto(w, err)
 		return
@@ -1269,7 +1289,7 @@ func (*Server) bundlesReady(pluginStatuses map[string]*plugins.Status) bool {
 
 func (s *Server) unversionedGetHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	includeBundleStatus := getBoolParam(r.URL, types.ParamBundleActivationV1, true) ||
+	includeBundleStatus := getBoolParam(r.URL, types.ParamBundleActivationV1, true) || //nolint:staticcheck
 		getBoolParam(r.URL, types.ParamBundlesActivationV1, true)
 	includePluginStatus := getBoolParam(r.URL, types.ParamPluginsV1, true)
 	excludePlugin := getStringSliceParam(r.URL, types.ParamExcludePluginV1)
@@ -1388,7 +1408,11 @@ func (s *Server) unversionedGetHealthWithPolicy(w http.ResponseWriter, r *http.R
 
 func writeHealthResponse(w http.ResponseWriter, err error) {
 	if err != nil {
-		writer.JSON(w, http.StatusInternalServerError, types.HealthResponseV1{Error: err.Error()}, false)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(types.HealthResponseV1{Error: err.Error()}); err != nil {
+			writer.ErrorAuto(w, err)
+		}
 		return
 	}
 
@@ -1566,14 +1590,14 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 		rego, err := s.makeRego(ctx, strictBuiltinErrors, txn, input, urlPath, m, includeInstrumentation, buf, opts)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 			writer.ErrorAuto(w, err)
 			return
 		}
 
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1581,6 +1605,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		s.preparedEvalQueries.Insert(pqID, preparedQuery)
 	}
 
+	tracker := newEvaluatedRuleTracker()
 	evalOpts := []rego.EvalOption{
 		rego.EvalTransaction(txn),
 		rego.EvalParsedInput(input),
@@ -1590,6 +1615,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		rego.EvalInterQueryBuiltinValueCache(s.interQueryBuiltinValueCache),
 		rego.EvalInstrument(includeInstrumentation),
 		rego.EvalNDBuiltinCache(ndbCache),
+		rego.EvalEvaluatedRuleTracker(tracker),
 	}
 
 	rs, err := preparedQuery.Eval(
@@ -1601,7 +1627,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, nil)
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1627,7 +1653,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, nil, m, nil); err != nil {
+		if err := logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, nil, m, nil, nil); err != nil {
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1641,7 +1667,7 @@ func (s *Server) v1DataGet(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty(r))
 	}
 
-	if err := logger.Log(ctx, txn, urlPath, "", goInput, input, result.Result, ndbCache, nil, m, nil); err != nil {
+	if err := logger.Log(ctx, txn, urlPath, "", goInput, input, result.Result, ndbCache, nil, m, evaluatedRuleLabels(tracker), nil); err != nil {
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -1722,10 +1748,29 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 	m.Timer(metrics.RegoInputParse).Start()
 
-	input, goInput, err := readInputPostV1(r)
+	parsed, err := readInputPostV1(r)
 	if err != nil {
 		writer.ErrorString(w, http.StatusBadRequest, types.CodeInvalidParameter, err)
 		return
+	}
+
+	input := parsed.Value
+	goInput := parsed.GoInput
+	reqMetadata := parsed.Metadata
+
+	respMetadata := map[string]any{}
+	customLog := func() map[string]any {
+		if len(reqMetadata) == 0 && len(respMetadata) == 0 {
+			return nil
+		}
+		c := make(map[string]any, 2)
+		if len(reqMetadata) > 0 {
+			c["request_metadata"] = reqMetadata
+		}
+		if len(respMetadata) > 0 {
+			c["response_metadata"] = respMetadata
+		}
+		return c
 	}
 
 	m.Timer(metrics.RegoInputParse).Stop()
@@ -1793,14 +1838,14 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 
 		rego, err := s.makeRego(ctx, strictBuiltinErrors, txn, input, urlPath, m, includeInstrumentation, buf, opts)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, customLog())
 			writer.ErrorAuto(w, err)
 			return
 		}
 
 		pq, err := rego.PrepareForEval(ctx)
 		if err != nil {
-			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+			_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, customLog())
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1808,7 +1853,8 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		s.preparedEvalQueries.Insert(pqID, preparedQuery)
 	}
 
-	rs, err := preparedQuery.Eval(ctx,
+	tracker := newEvaluatedRuleTracker()
+	evalOpts := []rego.EvalOption{
 		rego.EvalTransaction(txn),
 		rego.EvalParsedInput(input),
 		rego.EvalMetrics(m),
@@ -1817,19 +1863,31 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		rego.EvalInterQueryBuiltinValueCache(s.interQueryBuiltinValueCache),
 		rego.EvalInstrument(includeInstrumentation),
 		rego.EvalNDBuiltinCache(ndbCache),
-	)
+		rego.EvalResponseMetadata(respMetadata),
+		rego.EvalEvaluatedRuleTracker(tracker),
+	}
+
+	if reqMetadata != nil {
+		evalOpts = append(evalOpts, rego.EvalRequestMetadata(reqMetadata))
+	}
+
+	rs, err := preparedQuery.Eval(ctx, evalOpts...)
 
 	m.Timer(metrics.ServerHandler).Stop()
 
 	// Handle results.
 	if err != nil {
-		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil)
+		_ = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, err, m, nil, customLog())
 		writer.ErrorAuto(w, err)
 		return
 	}
 
 	result := types.DataResponseV1{
 		DecisionID: decisionID,
+	}
+
+	if len(respMetadata) > 0 {
+		result.Metadata = respMetadata
 	}
 
 	if input == nil {
@@ -1852,7 +1910,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if err = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, nil, m, nil); err != nil {
+		if err = logger.Log(ctx, txn, urlPath, "", goInput, input, nil, ndbCache, nil, m, nil, customLog()); err != nil {
 			writer.ErrorAuto(w, err)
 			return
 		}
@@ -1866,7 +1924,7 @@ func (s *Server) v1DataPost(w http.ResponseWriter, r *http.Request) {
 		result.Explanation = s.getExplainResponse(explainMode, *buf, pretty(r))
 	}
 
-	if err := logger.Log(ctx, txn, urlPath, "", goInput, input, result.Result, ndbCache, nil, m, nil); err != nil {
+	if err := logger.Log(ctx, txn, urlPath, "", goInput, input, result.Result, ndbCache, nil, m, evaluatedRuleLabels(tracker), customLog()); err != nil {
 		writer.ErrorAuto(w, err)
 		return
 	}
@@ -2760,11 +2818,12 @@ func (s *Server) updateNDCache(enabled bool) {
 }
 
 func stringPathToDataRef(s string) (ast.Ref, error) {
-	result := ast.Ref{ast.DefaultRootDocument}
 	r, err := stringPathToRef(s)
 	if err != nil {
 		return nil, err
 	}
+	result := make(ast.Ref, 1, 1+len(r))
+	result[0] = ast.DefaultRootDocument
 	return append(result, r...), nil
 }
 
@@ -2903,16 +2962,22 @@ func readInputGetV1(str string) (ast.Value, *any, error) {
 	return v, &input, err
 }
 
-func readInputPostV1(r *http.Request) (ast.Value, *any, error) {
+type parsedInput struct {
+	Value    ast.Value
+	GoInput  *any
+	Metadata map[string]any
+}
+
+func readInputPostV1(r *http.Request) (*parsedInput, error) {
 	parsed, ok := authorizer.GetBodyOnContext(r.Context())
 	if ok {
 		if obj, ok := parsed.(map[string]any); ok {
 			if input, ok := obj["input"]; ok {
 				v, err := ast.InterfaceToValue(input)
-				return v, &input, err
+				return &parsedInput{Value: v, GoInput: &input}, err
 			}
 		}
-		return nil, nil, nil
+		return &parsedInput{}, nil
 	}
 
 	var request types.DataRequestV1
@@ -2920,7 +2985,7 @@ func readInputPostV1(r *http.Request) (ast.Value, *any, error) {
 	// decompress the input if sent as zip
 	bodyBytes, err := util.ReadMaybeCompressedBody(r)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not decompress the body: %w", err)
+		return nil, fmt.Errorf("could not decompress the body: %w", err)
 	}
 
 	ct := r.Header.Get("Content-Type")
@@ -2929,22 +2994,22 @@ func readInputPostV1(r *http.Request) (ast.Value, *any, error) {
 	if strings.Contains(ct, "yaml") {
 		if len(bodyBytes) > 0 {
 			if err = util.Unmarshal(bodyBytes, &request); err != nil {
-				return nil, nil, fmt.Errorf("body contains malformed input document: %w", err)
+				return nil, fmt.Errorf("body contains malformed input document: %w", err)
 			}
 		}
 	} else {
 		dec := util.NewJSONDecoder(bytes.NewBuffer(bodyBytes))
 		if err := dec.Decode(&request); err != nil && err != io.EOF {
-			return nil, nil, fmt.Errorf("body contains malformed input document: %w", err)
+			return nil, fmt.Errorf("body contains malformed input document: %w", err)
 		}
 	}
 
 	if request.Input == nil {
-		return nil, nil, nil
+		return &parsedInput{Metadata: request.Metadata}, nil
 	}
 
 	v, err := ast.InterfaceToValue(*request.Input)
-	return v, request.Input, err
+	return &parsedInput{Value: v, GoInput: request.Input, Metadata: request.Metadata}, err
 }
 
 type compileRequest struct {
@@ -3012,32 +3077,6 @@ func readInputCompilePostV1(reqBytes []byte, queryParserOptions ast.ParserOption
 var indexHTML, _ = template.New("index").Parse(`
 <html>
 <head>
-<script type="text/javascript">
-function query() {
-	params = {
-		'query': document.getElementById("query").value,
-	}
-	if (document.getElementById("input").value !== "") {
-		try {
-			params["input"] = JSON.parse(document.getElementById("input").value);
-		} catch (e) {
-			document.getElementById("result").innerHTML = e;
-			return;
-		}
-	}
-	body = JSON.stringify(params);
-	opts = {
-		'method': 'POST',
-		'body': body,
-	}
-	fetch(new Request('v1/query', opts))
-		.then(resp => resp.json())
-		.then(json => {
-			str = JSON.stringify(json, null, 2);
-			document.getElementById("result").innerHTML = str;
-		});
-}
-</script>
 </head>
 </body>
 <pre>
@@ -3055,13 +3094,6 @@ Version: {{ .Version }}<br>
 Build Commit: {{ .BuildCommit }}<br>
 Build Timestamp: {{ .BuildTimestamp }}<br>
 Build Hostname: {{ .BuildHostname }}<br>
-<br>
-Query:<br>
-<textarea rows="10" cols="50" id="query"></textarea><br>
-<br>Input Data (JSON):<br>
-<textarea rows="10" cols="50" id="input"></textarea><br>
-<br><button onclick="query()">Submit</button>
-<pre><div id="result"></div></pre>
 </body>
 </html>
 `)
@@ -3083,6 +3115,7 @@ func (l decisionLogger) Log(
 	ndbCache builtins.NDBCache,
 	err error,
 	m metrics.Metrics,
+	evaluatedRuleLabels []map[string]any,
 	custom map[string]any,
 ) error {
 	if l.logger == nil {
@@ -3108,22 +3141,23 @@ func (l decisionLogger) Log(
 	}
 
 	info := &Info{
-		Txn:                txn,
-		Revision:           l.revision,
-		Bundles:            bundles,
-		Timestamp:          time.Now().UTC(),
-		DecisionID:         decisionID,
-		RemoteAddr:         rctx.ClientAddr,
-		HTTPRequestContext: httpRctx,
-		Path:               path,
-		Query:              query,
-		Input:              goInput,
-		InputAST:           astInput,
-		Results:            goResults,
-		Error:              err,
-		Metrics:            m,
-		RequestID:          rctx.ReqID,
-		Custom:             custom,
+		Txn:                 txn,
+		Revision:            l.revision,
+		Bundles:             bundles,
+		Timestamp:           time.Now().UTC(),
+		DecisionID:          decisionID,
+		RemoteAddr:          rctx.ClientAddr,
+		HTTPRequestContext:  httpRctx,
+		Path:                path,
+		Query:               query,
+		Input:               goInput,
+		InputAST:            astInput,
+		Results:             goResults,
+		Error:               err,
+		Metrics:             m,
+		RequestID:           rctx.ReqID,
+		EvaluatedRuleLabels: evaluatedRuleLabels,
+		Custom:              custom,
 	}
 
 	if ndbCache != nil {

@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -114,6 +115,20 @@ func (unknownResolver) Resolve(_ ast.Ref) (any, error) {
 	return "UNKNOWN", nil
 }
 
+type prefixMatchers []ast.Ref
+
+// Match returns true if any of it's prefixes matches ref, or it contains no prefixes.
+func (pm prefixMatchers) Match(ref ast.Ref) bool {
+	return len(pm) == 0 || slices.ContainsFunc(pm, ref.HasPrefix)
+}
+
+// AnyPrefixMatcher returns true if prefix is a prefix of any of the matchers, or it contains no prefixes.
+func (pm prefixMatchers) AnyPrefixMatcher(prefix ast.Ref) bool {
+	return len(pm) == 0 || slices.ContainsFunc(pm, func(matcher ast.Ref) bool {
+		return matcher.HasPrefix(prefix)
+	})
+}
+
 func termToString(t *ast.Term) string {
 	ti, err := ast.ValueToInterface(t.Value, unknownResolver{})
 	if err != nil {
@@ -170,15 +185,24 @@ func (r *Result) String() string {
 }
 
 func (r *Result) string(subResults bool) string {
-	if r.Skip {
-		return fmt.Sprintf("%v.%v: %v", r.Package, r.Name, r.outcome())
-	}
 	var buf bytes.Buffer
 
-	buf.WriteString(fmt.Sprintf("%v.%v: %v (%v)", r.Package, r.Name, r.outcome(), r.Duration))
+	buf.WriteString(r.Package)
+	buf.WriteByte('.')
+	buf.WriteString(r.Name)
+	buf.WriteString(": ")
+	buf.WriteString(r.outcome())
+
+	if r.Skip {
+		return buf.String()
+	}
+
+	buf.WriteString(" (")
+	buf.WriteString(r.Duration.String())
+	buf.WriteByte(')')
 
 	if subResults {
-		buf.WriteString("\n")
+		buf.WriteByte('\n')
 		buf.WriteString(r.SubResults.String())
 	}
 
@@ -199,7 +223,7 @@ func (r *Result) outcome() string {
 }
 
 func (sr *SubResult) String() string {
-	return fmt.Sprintf("%v: %v", sr.Name, sr.outcome())
+	return sr.Name + ": " + sr.outcome()
 }
 
 func (sr *SubResult) outcome() string {
@@ -236,10 +260,9 @@ func (srm SubResultMap) String() string {
 func (srm SubResultMap) string(indent string) string {
 	var buf bytes.Buffer
 	for fullName, sr := range srm.Iter {
-		buf.WriteString(fmt.Sprintf("%s%s\n",
-			strings.Repeat(indent, len(fullName)-1),
-			sr.String(),
-		))
+		buf.WriteString(strings.Repeat(indent, len(fullName)-1))
+		buf.WriteString(sr.String())
+		buf.WriteByte('\n')
 	}
 	return buf.String()
 }
@@ -261,6 +284,7 @@ type Runner struct {
 	timeout               time.Duration
 	modules               map[string]*ast.Module
 	bundles               map[string]*bundle.Bundle
+	prefixMatchers        prefixMatchers
 	filter                string
 	target                string // target type (wasm, rego, etc.)
 	customBuiltins        []*Builtin
@@ -336,7 +360,6 @@ func (r *Runner) SetCoverageTracer(tracer topdown.Tracer) *Runner {
 	} else {
 		r.cover = topdown.WrapLegacyTracer(tracer)
 	}
-	r.trace = false
 	return r
 }
 
@@ -346,7 +369,6 @@ func (r *Runner) SetCoverageQueryTracer(tracer topdown.QueryTracer) *Runner {
 		return r
 	}
 	r.cover = tracer
-	r.trace = false
 	return r
 }
 
@@ -393,6 +415,19 @@ func (r *Runner) SetBundles(bundles map[string]*bundle.Bundle) *Runner {
 	return r
 }
 
+// SetPrefixMatchers will have the test runner use the provided ref prefixes as a
+// filter for which test cases to run- This could either be a shorther path to e.g.
+// run all tests in one or more packages, or a full refs pointing to to individual
+// tests. Potential matches are evaluated in ascending order based on ref length.
+//
+// Experimental: This function is used to allow editor integrations more
+// flexibility in selecting which tests to run, and the implementation may
+// change depending on what we learn from that.
+func (r *Runner) SetPrefixMatchers(prefixes ...ast.Ref) *Runner {
+	r.prefixMatchers = slices.SortedFunc(slices.Values(prefixes), util.SliceLenCompare)
+	return r
+}
+
 // Filter will set a test name regex filter for the test runner. Only test
 // cases which match the filter will be run.
 func (r *Runner) Filter(regex string) *Runner {
@@ -415,7 +450,7 @@ func (r *Runner) Run(ctx context.Context, modules map[string]*ast.Module) (chan 
 }
 
 // RunTests executes tests found in either modules or bundles loaded on the runner.
-// The test results will be sent in file order.
+// Test results are sent as they complete and may arrive in any order.
 func (r *Runner) RunTests(ctx context.Context, txn storage.Transaction) (chan *Result, error) {
 	return r.runTests(ctx, txn, true, r.runTest, r.parallel)
 }
@@ -523,71 +558,69 @@ func (r *Runner) runTests(ctx context.Context, txn storage.Transaction, enablePr
 	go func() {
 		defer close(ch)
 
+		var wg sync.WaitGroup
 		semaphore := make(chan struct{}, parallel)
-		results := make(chan []*Result, len(r.compiler.Modules))
 		stopCtx, cancelTests := context.WithCancel(ctx)
 		defer cancelTests()
 
 		for _, module := range r.compiler.Modules {
-
-			// group the test results together by file
-			modResult := make(chan *Result, len(module.Rules))
-			go func() {
-				var testResults []*Result
-				for range len(module.Rules) {
-					tr := <-modResult
-					if tr != nil {
-						testResults = append(testResults, tr)
-					}
-				}
-				results <- testResults
-			}()
+			// If:
+			// 1. prefix matchers have been provided, and
+			// 2. no provided prefix matches the package path, and
+			// 3. the package path is not a prefix of any provided matcher
+			// We can skip this the module entirely
+			if !r.prefixMatchers.Match(module.Package.Path) && !r.prefixMatchers.AnyPrefixMatcher(module.Package.Path) {
+				continue
+			}
 
 			for _, rule := range module.Rules {
-				go func() {
-					semaphore <- struct{}{}
-					defer func() { <-semaphore }()
-
+				wg.Go(func() {
 					select {
 					case <-stopCtx.Done():
-						modResult <- nil
 						return
 					default:
-						if !r.shouldRun(rule, testRegex) {
-							modResult <- nil
-							return
-						}
-
-						tr, stop := func() (*Result, bool) {
-							runCtx, cancel := context.WithTimeout(ctx, r.timeout)
-							defer cancel()
-							return runFunc(runCtx, txn, module, rule)
-						}()
-						modResult <- tr
-						if stop {
-							cancelTests()
-						}
 					}
-				}()
+
+					select {
+					case semaphore <- struct{}{}:
+						defer func() { <-semaphore }()
+					case <-stopCtx.Done():
+						return
+					}
+
+					if !r.shouldRun(rule, testRegex) {
+						return
+					}
+
+					tr, stop := func() (*Result, bool) {
+						runCtx, cancel := context.WithTimeout(ctx, r.timeout)
+						defer cancel()
+						return runFunc(runCtx, txn, module, rule)
+					}()
+					ch <- tr
+					if stop {
+						cancelTests()
+					}
+				})
 			}
 		}
-
-		for range len(r.compiler.Modules) {
-			res := <-results
-
-			for _, tr := range res {
-				ch <- tr
-			}
-		}
+		wg.Wait()
 	}()
 
 	return ch, nil
 }
 
-func (*Runner) shouldRun(rule *ast.Rule, testRegex *regexp.Regexp) bool {
+func (r *Runner) shouldRun(rule *ast.Rule, testRegex *regexp.Regexp) bool {
+	ruleRef := rule.Head.Ref().GroundPrefix()
+	// len check even though the Match function does this already, as we'll
+	// want to avoid the Extend allocations in the common case of no prefixes configured
+	if len(r.prefixMatchers) > 0 && !r.prefixMatchers.Match(rule.Module.Package.Path.Extend(ruleRef)) {
+		return false
+	}
+
 	var ref ast.Ref
 
-	for _, term := range rule.Head.Ref().GroundPrefix() {
+	for _, term := range ruleRef {
 		ref = ref.Append(term)
 
 		var n string
@@ -596,8 +629,6 @@ func (*Runner) shouldRun(rule *ast.Rule, testRegex *regexp.Regexp) bool {
 			n = string(v)
 		case ast.String:
 			n = string(v)
-		default:
-			n = ""
 		}
 
 		if strings.HasPrefix(n, TestPrefix) || strings.HasPrefix(n, SkipTestPrefix) {
@@ -748,15 +779,15 @@ func injectTestCaseFunc(compiler *ast.Compiler) *ast.Error {
 							// Find the lowest (highest up the body) individual index of each var referenced in the rhs,
 							// and select the highest (lowest down the body) of those
 
-							// TODO: Use TypedValueMap once synced with main
-							lowest := ast.NewValueMap()
+							lowest := util.NewHasherMap[ast.Var, int](cmpEqual)
 
 							for j := i - 1; j >= 0; j-- {
 								expr := rule.Body[j]
 								ast.WalkVars(expr, func(v ast.Var) bool {
 									if vars.Contains(v) {
-										// We override the value for each var, so we get the lowest index (line highest up the body) for each
-										lowest.Put(v, ast.Number(strconv.Itoa(j)))
+										// We override the value for each var, so we get the lowest index
+										// (line highest up the body) for each
+										lowest.Put(v, j)
 										return true
 									}
 									return false
@@ -764,20 +795,18 @@ func injectTestCaseFunc(compiler *ast.Compiler) *ast.Error {
 							}
 
 							highest := 0
-							lowest.Iter(func(k, v ast.Value) bool {
-								if n, err := strconv.Atoi(string(v.(ast.Number))); err == nil {
-									if n > highest {
-										highest = n
-									}
+							lowest.Iter(func(k ast.Var, v int) bool {
+								if v > highest {
+									highest = v
 								}
+
 								return false
 							})
 
 							if highest < i {
-								// The expression is lower in the body than the lowes line of any expression that might contribute to its assignment
-								// Move the expression to just after the lowest line
-								moveTo := highest + 1
-								rule.Body, moved = moveExpr(rule.Body, i, moveTo)
+								// The expression is lower in the body than the lowest line of any expression that might
+								// contribute to its assignment. Move the expression to just after the lowest line.
+								rule.Body, moved = moveExpr(rule.Body, i, highest+1)
 							}
 						}
 					}
@@ -795,9 +824,7 @@ func injectTestCaseFunc(compiler *ast.Compiler) *ast.Error {
 
 			injectBelowMap := ast.NewValueMap()
 			for _, term := range argsRef {
-				for i := len(rule.Body) - 1; i >= 0; i-- {
-					expr := rule.Body[i]
-
+				for i, expr := range slices.Backward(rule.Body) {
 					ast.WalkVars(expr, func(v ast.Var) bool {
 						if v.Equal(term.Value) {
 							injectBelowMap.Put(v, ast.Number(strconv.Itoa(i)))
@@ -827,6 +854,10 @@ func injectTestCaseFunc(compiler *ast.Compiler) *ast.Error {
 		}
 	}
 	return nil
+}
+
+func cmpEqual[T comparable](a, b T) bool {
+	return a == b
 }
 
 func isLocalVar(v ast.Value) bool {
@@ -868,11 +899,12 @@ func moveExpr(body ast.Body, from int, to int) (ast.Body, bool) {
 // use rule.Head.Ref()
 func ruleName(h *ast.Head) (string, ast.Ref) {
 	var n string
-	var ref ast.Ref
 
-	for _, term := range h.Ref().GroundPrefix() {
-		ref = ref.Append(term)
-		switch v := term.Value.(type) {
+	rgp := h.Ref().GroundPrefix()
+	i := 0
+
+	for i = range rgp {
+		switch v := rgp[i].Value.(type) {
 		case ast.Var:
 			n = string(v)
 		case ast.String:
@@ -880,13 +912,12 @@ func ruleName(h *ast.Head) (string, ast.Ref) {
 		default:
 			n = ""
 		}
-
 		if strings.HasPrefix(n, TestPrefix) || strings.HasPrefix(n, SkipTestPrefix) {
 			break
 		}
 	}
 
-	return n, ref
+	return n, rgp[:i+1]
 }
 
 func (r *Runner) runTest(ctx context.Context, txn storage.Transaction, mod *ast.Module, rule *ast.Rule) (*Result, bool) {
@@ -900,17 +931,17 @@ func (r *Runner) runTest(ctx context.Context, txn storage.Transaction, mod *ast.
 	var bufferTracer *topdown.BufferTracer
 	var tracers []topdown.QueryTracer
 
-	if r.cover != nil {
-		t := NewTestQueryTracer()
-		tracers = append(tracers, r.cover, t)
-		bufferTracer = &t.BufferTracer
-	} else if r.trace {
+	if r.trace {
 		bufferTracer = topdown.NewBufferTracer()
 		tracers = append(tracers, bufferTracer)
 	} else {
 		t := NewTestQueryTracer()
 		tracers = append(tracers, t)
 		bufferTracer = &t.BufferTracer
+	}
+
+	if r.cover != nil {
+		tracers = append(tracers, r.cover)
 	}
 
 	printbuf := bytes.NewBuffer(nil)
@@ -1067,7 +1098,6 @@ func subResult(n string, v any) *SubResult {
 
 func (r *Runner) runBenchmark(ctx context.Context, txn storage.Transaction, mod *ast.Module, rule *ast.Rule, options BenchmarkOptions) (*Result, bool) {
 	_, rf := ruleName(rule.Head)
-
 	tr := &Result{
 		Location: rule.Loc(),
 		Package:  mod.Package.Path.String(),
@@ -1079,12 +1109,11 @@ func (r *Runner) runBenchmark(ctx context.Context, txn storage.Transaction, mod 
 	t0 := time.Now()
 
 	br := testing.Benchmark(func(b *testing.B) {
-
 		pq, err := rego.New(
 			rego.Store(r.store),
 			rego.Transaction(txn),
 			rego.Compiler(r.compiler),
-			rego.Query(rule.Path().String()),
+			rego.Query(rule.Module.Package.Path.Extend(rule.Head.Ref().GroundPrefix()).String()),
 			rego.Runtime(r.runtime),
 			rego.Target(r.target),
 		).PrepareForEval(ctx)

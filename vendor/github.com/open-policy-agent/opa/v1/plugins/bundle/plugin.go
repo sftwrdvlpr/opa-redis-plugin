@@ -18,13 +18,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	bundleUtils "github.com/open-policy-agent/opa/internal/bundle"
 	"github.com/open-policy-agent/opa/internal/ref"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/bundle"
 	"github.com/open-policy-agent/opa/v1/download"
+	"github.com/open-policy-agent/opa/v1/hooks"
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/metrics"
 	"github.com/open-policy-agent/opa/v1/plugins"
@@ -591,7 +591,7 @@ func (p *Plugin) checkPluginReadiness() {
 	if !p.ready {
 		readyNow := true // optimistically
 		for _, status := range p.status {
-			if len(status.Errors) > 0 || (status.LastSuccessfulActivation == time.Time{}) {
+			if len(status.Errors) > 0 || status.LastSuccessfulActivation.IsZero() {
 				readyNow = false // Not ready yet, check again on next bundle activation.
 				break
 			}
@@ -636,15 +636,26 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle, is
 
 		var activateErr error
 
+		// Call pre-activation hooks so plugins can inspect the bundle manifest
+		// and register external sources before compilation.
+		p.manager.Hooks().Each(func(h hooks.Hook) {
+			if f, ok := h.(hooks.BundlePreActivateHook); ok {
+				if err := f.OnBundlePreActivate(ctx, name, b.Manifest); err != nil {
+					p.log(name).Warn("Pre-activation hook failed: %v", err)
+				}
+			}
+		})
+
 		opts := &bundle.ActivateOpts{
-			Ctx:           ctx,
-			Store:         p.manager.Store,
-			Txn:           txn,
-			TxnCtx:        params.Context,
-			Compiler:      compiler,
-			Metrics:       p.status[name].Metrics,
-			Bundles:       map[string]*bundle.Bundle{name: b},
-			ParserOptions: p.manager.ParserOptions(),
+			Ctx:             ctx,
+			Store:           p.manager.Store,
+			Txn:             txn,
+			TxnCtx:          params.Context,
+			Compiler:        compiler,
+			Metrics:         p.status[name].Metrics,
+			Bundles:         map[string]*bundle.Bundle{name: b},
+			ExternalSources: p.manager.GetExternalSources(),
+			ParserOptions:   p.manager.ParserOptions(),
 		}
 
 		if p.manager.Info != nil {
@@ -664,7 +675,7 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle, is
 		if isMultiBundle {
 			activateErr = bundle.Activate(opts)
 		} else {
-			activateErr = bundle.ActivateLegacy(opts)
+			activateErr = bundle.ActivateLegacy(opts) //nolint:staticcheck
 		}
 
 		plugins.SetCompilerOnContext(params.Context, compiler)
@@ -869,6 +880,7 @@ func (fl *fileLoader) oneShot(ctx context.Context) (err error) {
 		WithLazyLoadingMode(bundle.HasExtension()).
 		WithSizeLimitBytes(fl.sizeLimitBytes).
 		WithRegoVersion(fl.bundleParserOpts.RegoVersion).
+		WithProcessAnnotations(fl.bundleParserOpts.ProcessAnnotation).
 		Read()
 	u.Error = err
 	if err == nil {

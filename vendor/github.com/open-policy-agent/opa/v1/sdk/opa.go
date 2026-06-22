@@ -172,7 +172,7 @@ func (opa *OPA) configure(ctx context.Context, bs []byte, ready chan struct{}, b
 		plugins.Info(runtimeInfo),
 		plugins.Logger(opa.logger),
 		plugins.ConsoleLogger(opa.console),
-		plugins.WithParserOptions(ast.ParserOptions{RegoVersion: opa.regoVersion}),
+		plugins.WithParserOptions(ast.ParserOptions{ProcessAnnotation: true, RegoVersion: opa.regoVersion}),
 		plugins.EnablePrintStatements(opa.logger.GetLevel() >= logging.Info),
 		plugins.PrintHook(loggingPrintHook{logger: opa.logger}),
 		plugins.WithHooks(opa.hooks),
@@ -243,20 +243,7 @@ func (opa *OPA) configure(ctx context.Context, bs []byte, ready chan struct{}, b
 
 	manager.Register(discovery.Name, d)
 
-	if err := manager.Start(ctx); err != nil {
-		return err
-	}
-
-	if block {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ready:
-		}
-	}
-
 	opa.mtx.Lock()
-	defer opa.mtx.Unlock()
 
 	// NOTE(tsandall): there is no return value from Stop() and it could block
 	// on async operations (e.g., decision log uploading) so defer the call to
@@ -276,6 +263,24 @@ func (opa *OPA) configure(ctx context.Context, bs []byte, ready chan struct{}, b
 	opa.state.interQueryBuiltinCache = cache.NewInterQueryCacheWithContext(ctx, manager.InterQueryBuiltinCacheConfig())
 	opa.state.interQueryBuiltinValueCache = cache.NewInterQueryValueCache(ctx, manager.InterQueryBuiltinCacheConfig())
 	opa.config = bs
+
+	opa.mtx.Unlock()
+
+	if err := manager.Start(ctx); err != nil {
+		return err
+	}
+
+	// Resolve the buffered logger: flush to logger plugin if configured,
+	// otherwise discard (no fallback).
+	opa.logger = manager.ResolveBufferedLogger(nil)
+
+	if block {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ready:
+		}
+	}
 
 	return nil
 }
@@ -310,6 +315,9 @@ func (opa *OPA) Decision(ctx context.Context, options DecisionOptions) (*Decisio
 		}
 	}
 
+	// TODO: make extractor configurable via SDK options
+	tracker := &topdown.EvaluatedRuleTracker{}
+
 	result, err := opa.executeTransaction(
 		ctx,
 		&record,
@@ -332,10 +340,12 @@ func (opa *OPA) Decision(ctx context.Context, options DecisionOptions) (*Decisio
 				tracer:                      options.Tracer,
 				profiler:                    options.Profiler,
 				instrument:                  options.Instrument,
+				evaluatedRules:              tracker,
 			})
 			if record.Error == nil {
 				record.Results = &result.Result
 			}
+			record.EvaluatedRuleLabels = tracker.Labels
 		},
 	)
 	if err != nil {
@@ -561,6 +571,7 @@ type evalArgs struct {
 	tracer                      topdown.QueryTracer
 	profiler                    topdown.QueryTracer
 	instrument                  bool
+	evaluatedRules              *topdown.EvaluatedRuleTracker
 }
 
 func evaluate(ctx context.Context, args evalArgs) (any, types.ProvenanceV1, ast.Value, map[string]server.BundleInfo, error) {
@@ -587,7 +598,7 @@ func evaluate(ctx context.Context, args evalArgs) (any, types.ProvenanceV1, ast.
 	}
 
 	pq, err := args.queryCache.Get(r.String(), func(query string) (*rego.PreparedEvalQuery, error) {
-		pq, err := rego.New(
+		opts := []func(*rego.Rego){
 			rego.Time(args.now),
 			rego.Metrics(args.m),
 			rego.Query(query),
@@ -597,7 +608,12 @@ func evaluate(ctx context.Context, args evalArgs) (any, types.ProvenanceV1, ast.
 			rego.PrintHook(args.printHook),
 			rego.StrictBuiltinErrors(args.strictBuiltinErrors),
 			rego.Instrument(args.instrument),
-			rego.Runtime(args.runtime)).PrepareForEval(ctx)
+			rego.Runtime(args.runtime),
+		}
+		if args.evaluatedRules != nil {
+			opts = append(opts, rego.EvaluatedRuleTracker(args.evaluatedRules))
+		}
+		pq, err := rego.New(opts...).PrepareForEval(ctx)
 		if err != nil {
 			return nil, err
 		}

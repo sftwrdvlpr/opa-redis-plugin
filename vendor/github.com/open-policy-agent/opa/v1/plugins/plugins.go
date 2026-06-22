@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	mr "math/rand"
 	"net/http"
@@ -35,6 +36,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/topdown/cache"
 	"github.com/open-policy-agent/opa/v1/topdown/print"
 	"github.com/open-policy-agent/opa/v1/tracing"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 // Factory defines the interface OPA uses to instantiate your plugin.
@@ -110,6 +112,14 @@ type Plugin interface {
 // Triggerable defines the interface plugins use for manual plugin triggers.
 type Triggerable interface {
 	Trigger(context.Context) error
+}
+
+// LoggerPlugin defines the interface for plugins that provide a logging implementation.
+type LoggerPlugin interface {
+	Plugin
+
+	// Logger returns the slog.Handler implementation provided by this plugin.
+	Logger() slog.Handler
 }
 
 // State defines the state that a Plugin instance is currently
@@ -195,8 +205,10 @@ type Manager struct {
 	plugins                      []namedplugin
 	registeredTriggers           []func(storage.Transaction)
 	mtx                          sync.Mutex
-	pluginStatus                 map[string]*Status
-	pluginStatusListeners        map[string]StatusListener
+	pluginStatusCh               chan pluginStatusMsg
+	stopPluginStatusCh           chan chan struct{}
+	pluginStatusDoneCh           chan struct{}
+	finalPluginStatus            map[string]*Status
 	initBundles                  map[string]*bundle.Bundle
 	initFiles                    loader.Result
 	maxErrors                    int
@@ -218,6 +230,8 @@ type Manager struct {
 	bootstrapConfigLabels        map[string]string
 	hooks                        hooks.Hooks
 	enableVersionCheck           bool
+	minTLSVersion                uint16
+	cipherSuites                 *[]uint16
 	versionChecker               versioncheck.Checker
 	opaReportNotifyCh            chan struct{}
 	stop                         chan chan struct{}
@@ -226,7 +240,42 @@ type Manager struct {
 	extraMiddlewares             []func(http.Handler) http.Handler
 	extraAuthorizerRoutes        []func(string, []any) bool
 	bundleActivatorPlugin        string
+	externalSources              *util.HasherMap[ast.Ref, ast.ExternalRuleSource]
+	externalSourcesMux           sync.RWMutex
 }
+
+type pluginStatusMsg interface {
+	pluginStatusMsg()
+}
+
+type statusUpdate struct {
+	name   string
+	status *Status
+	done   chan struct{}
+}
+
+type statusInitPlugin struct {
+	name string
+}
+
+type statusRegisterListener struct {
+	name     string
+	listener StatusListener
+}
+
+type statusUnregisterListener struct {
+	name string
+}
+
+type statusQuery struct {
+	reply chan map[string]*Status
+}
+
+func (statusUpdate) pluginStatusMsg()             {}
+func (statusInitPlugin) pluginStatusMsg()         {}
+func (statusRegisterListener) pluginStatusMsg()   {}
+func (statusUnregisterListener) pluginStatusMsg() {}
+func (statusQuery) pluginStatusMsg()              {}
 
 type (
 	managerContextKey      string
@@ -413,6 +462,16 @@ func WithHooks(hs hooks.Hooks) func(*Manager) {
 	}
 }
 
+// Hooks returns the hooks configured on the Manager.
+func (m *Manager) Hooks() hooks.Hooks {
+	return m.hooks
+}
+
+// AppendHook allows adding to the hooks configured on the Manager.
+func (m *Manager) AppendHook(h hooks.Hook) {
+	m.hooks.Append(h)
+}
+
 // WithParserOptions sets the parser options to be used by the plugin manager.
 func WithParserOptions(opts ast.ParserOptions) func(*Manager) {
 	return func(m *Manager) {
@@ -460,6 +519,20 @@ func WithBundleActivatorPlugin(bundleActivatorPlugin string) func(*Manager) {
 	}
 }
 
+// WithMinTLSVersion sets the minimum TLS version for REST client connections
+func WithMinTLSVersion(v uint16) func(*Manager) {
+	return func(m *Manager) {
+		m.minTLSVersion = v
+	}
+}
+
+// WithCipherSuites sets the cipher suites for REST client connections
+func WithCipherSuites(cs *[]uint16) func(*Manager) {
+	return func(m *Manager) {
+		m.cipherSuites = cs
+	}
+}
+
 // New creates a new Manager using config.
 func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*Manager, error) {
 	parsedConfig, err := config.ParseConfig(raw, id)
@@ -471,12 +544,13 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		Store:                 store,
 		Config:                parsedConfig,
 		ID:                    id,
-		pluginStatus:          map[string]*Status{},
-		pluginStatusListeners: map[string]StatusListener{},
 		maxErrors:             -1,
 		serverInitialized:     make(chan struct{}),
 		bootstrapConfigLabels: parsedConfig.Labels,
 		extraRoutes:           map[string]ExtraRoute{},
+		pluginStatusCh:        make(chan pluginStatusMsg),
+		stopPluginStatusCh:    make(chan chan struct{}),
+		pluginStatusDoneCh:    make(chan struct{}),
 	}
 
 	for _, f := range opts {
@@ -535,6 +609,8 @@ func New(raw []byte, id string, store storage.Store, opts ...func(*Manager)) (*M
 		m.versionChecker = versionChecker
 	}
 
+	go m.pluginStatusLoop()
+
 	return m, nil
 }
 
@@ -566,6 +642,7 @@ func (m *Manager) Init(ctx context.Context) error {
 			EnablePrintStatements: m.enablePrintStatements,
 			ParserOptions:         m.parserOptions,
 			BundleActivatorPlugin: m.bundleActivatorPlugin,
+			ExternalSources:       m.GetExternalSources(),
 		})
 		if err != nil {
 			return err
@@ -624,13 +701,15 @@ func (m *Manager) GetConfig() *config.Config {
 // the plugins will be started.
 func (m *Manager) Register(name string, plugin Plugin) {
 	m.mtx.Lock()
-	defer m.mtx.Unlock()
 	m.plugins = append(m.plugins, namedplugin{
 		name:   name,
 		plugin: plugin,
 	})
-	if _, ok := m.pluginStatus[name]; !ok {
-		m.pluginStatus[name] = &Status{State: StateNotReady}
+	m.mtx.Unlock()
+
+	select {
+	case m.pluginStatusCh <- statusInitPlugin{name: name}:
+	case <-m.pluginStatusDoneCh:
 	}
 }
 
@@ -763,6 +842,30 @@ func (m *Manager) setWasmResolvers(rs []*wasm.Resolver) {
 	m.wasmResolvers = rs
 }
 
+// RegisterExternalSource registers an external rule source with the manager.
+// The source will be applied to all compilers created by the manager.
+// This should be called from a plugin's constructor or Start() method.
+func (m *Manager) RegisterExternalSource(pkgRef ast.Ref, source ast.ExternalRuleSource) {
+	m.externalSourcesMux.Lock()
+	defer m.externalSourcesMux.Unlock()
+
+	if m.externalSources == nil {
+		m.externalSources = util.NewHasherMap[ast.Ref, ast.ExternalRuleSource](ast.RefEqual)
+	}
+
+	m.externalSources.Put(pkgRef, source)
+
+	m.logger.Debug("Registered external source for package: %s", pkgRef)
+}
+
+// GetExternalSources returns the registered external sources
+func (m *Manager) GetExternalSources() *util.HasherMap[ast.Ref, ast.ExternalRuleSource] {
+	m.externalSourcesMux.RLock()
+	defer m.externalSourcesMux.RUnlock()
+
+	return m.externalSources
+}
+
 // Start starts the manager. Init() should be called once before Start().
 func (m *Manager) Start(ctx context.Context) error {
 	if m == nil {
@@ -792,6 +895,25 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 	}
 
+	// After starting plugins, check if any external sources were registered
+	// and recompile if necessary to include them in the rule tree
+	externalSources := m.GetExternalSources()
+	if externalSources != nil && externalSources.Len() > 0 {
+		err := storage.Txn(ctx, m.Store, storage.TransactionParams{}, func(txn storage.Transaction) error {
+			compiler, err := loadCompilerFromStore(ctx, m.Store, txn, m.enablePrintStatements, m.ParserOptions(), externalSources)
+			if err != nil {
+				return err
+			}
+			m.setCompiler(compiler)
+			m.logger.Debug("Recompiled policies with %d external source(s) after plugin startup", externalSources.Len())
+			return nil
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to recompile with external sources: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -800,6 +922,7 @@ func (m *Manager) Start(ctx context.Context) error {
 // of the graceful shutdown period passed with the context as a timeout.
 // Note that a graceful shutdown period configured with the Manager instance
 // will override the timeout of the passed in context (if applicable).
+// NOTE: You cannot call this twice, or it will hang.
 func (m *Manager) Stop(ctx context.Context) {
 	var toStop []Plugin
 
@@ -824,8 +947,14 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 	if c, ok := m.Store.(interface{ Close(context.Context) error }); ok {
 		if err := c.Close(ctx); err != nil {
-			m.logger.Error("Error closing store: %v", err)
+			m.Logger().Error("Error closing store: %v", err)
 		}
+	}
+
+	{
+		done := make(chan struct{})
+		m.stopPluginStatusCh <- done
+		<-done
 	}
 
 	if m.stop != nil {
@@ -839,9 +968,11 @@ func (m *Manager) DefaultServiceOpts(config *config.Config) cfg.ServiceOptions {
 	return cfg.ServiceOptions{
 		Raw:                   config.Services,
 		AuthPlugin:            m.AuthPlugin,
-		Logger:                m.logger,
+		Logger:                m.Logger(),
 		Keys:                  m.keys,
 		DistributedTacingOpts: m.distributedTacingOpts,
+		MinTLSVersion:         m.minTLSVersion,
+		CipherSuites:          m.cipherSuites,
 	}
 }
 
@@ -902,54 +1033,48 @@ func (m *Manager) Reconfigure(newCfg *config.Config) error {
 
 // PluginStatus returns the current statuses of any plugins registered.
 func (m *Manager) PluginStatus() map[string]*Status {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-
-	return m.copyPluginStatus()
+	reply := make(chan map[string]*Status, 1)
+	select {
+	case m.pluginStatusCh <- statusQuery{reply: reply}:
+		return <-reply
+	case <-m.pluginStatusDoneCh:
+		return m.finalPluginStatus
+	}
 }
 
 // RegisterPluginStatusListener registers a StatusListener to be
 // called when plugin status updates occur.
 func (m *Manager) RegisterPluginStatusListener(name string, listener StatusListener) {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-
-	m.pluginStatusListeners[name] = listener
+	select {
+	case m.pluginStatusCh <- statusRegisterListener{name: name, listener: listener}:
+	case <-m.pluginStatusDoneCh:
+	}
 }
 
 // UnregisterPluginStatusListener removes a StatusListener registered with the
 // same name.
 func (m *Manager) UnregisterPluginStatusListener(name string) {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-
-	delete(m.pluginStatusListeners, name)
+	select {
+	case m.pluginStatusCh <- statusUnregisterListener{name: name}:
+	case <-m.pluginStatusDoneCh:
+	}
 }
 
 // UpdatePluginStatus updates a named plugins status. Any registered
 // listeners will be called with a copy of the new state of all
 // plugins.
 func (m *Manager) UpdatePluginStatus(pluginName string, status *Status) {
-	var toNotify map[string]StatusListener
-	var statuses map[string]*Status
-
-	func() {
-		m.mtx.Lock()
-		defer m.mtx.Unlock()
-		m.pluginStatus[pluginName] = status
-		toNotify = make(map[string]StatusListener, len(m.pluginStatusListeners))
-		maps.Copy(toNotify, m.pluginStatusListeners)
-		statuses = m.copyPluginStatus()
-	}()
-
-	for _, l := range toNotify {
-		l(statuses)
+	done := make(chan struct{})
+	select {
+	case m.pluginStatusCh <- statusUpdate{name: pluginName, status: status, done: done}:
+		<-done
+	case <-m.pluginStatusDoneCh:
 	}
 }
 
-func (m *Manager) copyPluginStatus() map[string]*Status {
+func copyPluginStatus(src map[string]*Status) map[string]*Status {
 	statusCpy := map[string]*Status{}
-	for k, v := range m.pluginStatus {
+	for k, v := range src {
 		var cpy *Status
 		if v != nil {
 			cpy = &Status{
@@ -970,7 +1095,7 @@ func (m *Manager) onCommit(ctx context.Context, txn storage.Transaction, event s
 	// compiler on the context but the server does not (nor would users
 	// implementing their own policy loading.)
 	if compiler == nil && event.PolicyChanged() {
-		compiler, _ = loadCompilerFromStore(ctx, m.Store, txn, m.enablePrintStatements, m.ParserOptions())
+		compiler, _ = loadCompilerFromStore(ctx, m.Store, txn, m.enablePrintStatements, m.ParserOptions(), m.GetExternalSources())
 	}
 
 	if compiler != nil {
@@ -1008,7 +1133,7 @@ func (m *Manager) onCommit(ctx context.Context, txn storage.Transaction, event s
 	}
 }
 
-func loadCompilerFromStore(ctx context.Context, store storage.Store, txn storage.Transaction, enablePrintStatements bool, popts ast.ParserOptions) (*ast.Compiler, error) {
+func loadCompilerFromStore(ctx context.Context, store storage.Store, txn storage.Transaction, enablePrintStatements bool, popts ast.ParserOptions, externalSources *util.HasherMap[ast.Ref, ast.ExternalRuleSource]) (*ast.Compiler, error) {
 	policies, err := store.ListPolicies(ctx, txn)
 	if err != nil {
 		return nil, err
@@ -1032,6 +1157,14 @@ func loadCompilerFromStore(ctx context.Context, store storage.Store, txn storage
 
 	if popts.RegoVersion != ast.RegoUndefined {
 		compiler = compiler.WithDefaultRegoVersion(popts.RegoVersion)
+	}
+
+	// Apply external sources BEFORE compilation
+	if externalSources != nil {
+		externalSources.Iter(func(ref ast.Ref, source ast.ExternalRuleSource) bool {
+			compiler = compiler.WithExternalSource(ref, source)
+			return false
+		})
 	}
 
 	compiler.Compile(modules)
@@ -1109,7 +1242,56 @@ func (m *Manager) Services() []string {
 
 // Logger gets the standard logger for this plugin manager.
 func (m *Manager) Logger() logging.Logger {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	return m.logger
+}
+
+// SetLogger replaces the logger for this plugin manager.
+// Used during startup to swap the BufferedLogger for the real logger after flush.
+func (m *Manager) SetLogger(l logging.Logger) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	m.logger = l
+}
+
+// ResolveBufferedLogger checks if the current logger is a BufferedLogger and
+// resolves it to a real logger. If a logger plugin is configured, buffered logs
+// are flushed to it. Otherwise, if a fallback logger is provided, buffered logs
+// are flushed to that. If no fallback is provided, buffered entries are discarded
+// and a no-op logger is used. Returns the resolved logger.
+//
+// This method should be called after Manager.Start().
+func (m *Manager) ResolveBufferedLogger(fallback logging.Logger) logging.Logger {
+	buffered, ok := m.logger.(*logging.BufferedLogger)
+	if !ok {
+		return m.logger
+	}
+
+	// Check if a logger plugin is configured and started.
+	configObj := m.GetConfig()
+	if configObj != nil && configObj.Server != nil && configObj.Server.LoggerPlugin != nil {
+		if p := m.Plugin(*configObj.Server.LoggerPlugin); p != nil {
+			if lp, ok := p.(LoggerPlugin); ok {
+				target := logging.NewLoggerFromSlogHandler(lp.Logger(), buffered.GetLevel())
+				buffered.Flush(target)
+				m.SetLogger(target)
+				return target
+			}
+		}
+	}
+
+	// No logger plugin found.
+	if fallback != nil {
+		buffered.Flush(fallback)
+		m.SetLogger(fallback)
+		return fallback
+	}
+
+	buffered.Close()
+	noop := logging.NewNoOpLogger()
+	m.SetLogger(noop)
+	return noop
 }
 
 // ConsoleLogger gets the console logger for this plugin manager.
@@ -1184,7 +1366,7 @@ func (m *Manager) sendOPAUpdateLoop(ctx context.Context) {
 				opaReportNotify = false
 				_, err := m.versionChecker.LatestVersion(ctx)
 				if err != nil {
-					m.logger.WithFields(map[string]any{"err": err}).Debug("Unable to check OPA version.")
+					m.Logger().WithFields(map[string]any{"err": err}).Debug("Unable to check OPA version.")
 				}
 			}
 
@@ -1193,6 +1375,46 @@ func (m *Manager) sendOPAUpdateLoop(ctx context.Context) {
 		case done := <-m.stop:
 			cancel()
 			ticker.Stop()
+			done <- struct{}{}
+			return
+		}
+	}
+}
+
+func (m *Manager) pluginStatusLoop() {
+	status := map[string]*Status{}
+	listeners := map[string]StatusListener{}
+
+	defer func() {
+		m.finalPluginStatus = copyPluginStatus(status)
+		close(m.pluginStatusDoneCh)
+	}()
+
+	for {
+		select {
+		case msg := <-m.pluginStatusCh:
+			switch msg := msg.(type) {
+			case statusUpdate:
+				status[msg.name] = msg.status
+				if len(listeners) > 0 {
+					statuses := copyPluginStatus(status)
+					for _, l := range listeners {
+						l(statuses)
+					}
+				}
+				close(msg.done)
+			case statusInitPlugin:
+				if _, ok := status[msg.name]; !ok {
+					status[msg.name] = &Status{State: StateNotReady}
+				}
+			case statusRegisterListener:
+				listeners[msg.name] = msg.listener
+			case statusUnregisterListener:
+				delete(listeners, msg.name)
+			case statusQuery:
+				msg.reply <- copyPluginStatus(status)
+			}
+		case done := <-m.stopPluginStatusCh:
 			done <- struct{}{}
 			return
 		}

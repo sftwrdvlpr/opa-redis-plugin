@@ -28,12 +28,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/propagation"
-	"go.uber.org/automaxprocs/maxprocs"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/open-policy-agent/opa/internal/compiler"
 	"github.com/open-policy-agent/opa/internal/config"
 	internal_tracing "github.com/open-policy-agent/opa/internal/distributedtracing"
 	internal_logging "github.com/open-policy-agent/opa/internal/logging"
+	internal_metrics "github.com/open-policy-agent/opa/internal/metricsexport"
 	"github.com/open-policy-agent/opa/internal/pathwatcher"
 	"github.com/open-policy-agent/opa/internal/prometheus"
 	"github.com/open-policy-agent/opa/internal/ref"
@@ -49,6 +50,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/metrics"
 	"github.com/open-policy-agent/opa/v1/plugins"
 	"github.com/open-policy-agent/opa/v1/plugins/discovery"
+	filelogger "github.com/open-policy-agent/opa/v1/plugins/logger/file"
 	"github.com/open-policy-agent/opa/v1/plugins/logs"
 	metrics_config "github.com/open-policy-agent/opa/v1/plugins/server/metrics"
 	"github.com/open-policy-agent/opa/v1/repl"
@@ -303,7 +305,10 @@ func (p *Params) regoVersion() ast.RegoVersion {
 }
 
 func (p *Params) parserOptions() ast.ParserOptions {
-	return ast.ParserOptions{RegoVersion: p.regoVersion()}
+	return ast.ParserOptions{
+		ProcessAnnotation: true,
+		RegoVersion:       p.regoVersion(),
+	}
 }
 
 // LoggingConfig stores the configuration for OPA's logging behaviour.
@@ -344,6 +349,7 @@ type Runtime struct {
 	metrics           *prometheus.Provider
 	versionChecker    versioncheck.Checker
 	traceExporter     *otlptrace.Exporter
+	meterProvider     *sdkmetric.MeterProvider
 	loadedPathsResult *initload.LoadPathsResult
 
 	serverStatus  ServerStatus
@@ -383,10 +389,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	if params.Logger != nil {
 		logger = params.Logger
 	} else {
-		stdLogger := logging.New()
-		stdLogger.SetLevel(level)
-		stdLogger.SetFormatter(internal_logging.GetFormatter(params.Logging.Format, params.Logging.TimestampFormat))
-		logger = stdLogger
+		// Always use BufferedLogger to capture early startup logs
+		// After plugins start, we'll flush to either a logger plugin or StandardLogger
+		bufferedLogger := logging.NewBufferedLogger(1000)
+		bufferedLogger.SetLevel(level)
+		logger = bufferedLogger
 	}
 
 	if err := params.Hooks.Validate(); err != nil {
@@ -423,9 +430,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		}
 	}
 
-	regoVersion := params.regoVersion()
-
-	loaded, err := initload.LoadPathsForRegoVersion(regoVersion, params.Paths, params.Filter, params.BundleMode, params.BundleVerificationConfig, params.SkipBundleVerification, params.BundleLazyLoadingMode, false, false, nil, nil)
+	loaded, err := initload.LoadPathsForRegoVersion(params.parserOptions(), params.Paths, params.Filter, params.BundleMode, params.BundleVerificationConfig, params.SkipBundleVerification, params.BundleLazyLoadingMode, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("load error: %w", err)
 	}
@@ -489,6 +494,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config error: %w", err)
 	}
+
+	meterProvider, err := internal_metrics.Init(ctx, config, params.ID, metrics.Gatherer())
+	if err != nil {
+		return nil, fmt.Errorf("config error: %w", err)
+	}
 	if tracerProvider != nil {
 		params.DistributedTracingOpts = tracing.NewOptions(
 			otelhttp.WithTracerProvider(tracerProvider),
@@ -511,11 +521,13 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		plugins.WithRouter(params.Router),
 		plugins.WithPrometheusRegister(metrics),
 		plugins.WithTracerProvider(tracerProvider),
-		plugins.WithEnableTelemetry(params.EnableVersionCheck),
+		plugins.WithEnableVersionCheck(params.EnableVersionCheck),
 		plugins.WithParserOptions(params.parserOptions()),
 		plugins.WithDistributedTracingOpts(params.DistributedTracingOpts),
 		plugins.WithBundleActivatorPlugin(params.BundleActivatorPlugin),
 		plugins.WithHooks(params.Hooks),
+		plugins.WithMinTLSVersion(params.MinTLSVersion),
+		plugins.WithCipherSuites(params.CipherSuites),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("config error: %w", err)
@@ -560,6 +572,7 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		versionChecker:    versionChecker,
 		serverStatus:      ServerNotStarted,
 		traceExporter:     traceExporter,
+		meterProvider:     meterProvider,
 		loadedPathsResult: loaded,
 	}
 
@@ -611,7 +624,7 @@ func (rt *Runtime) StartServer(ctx context.Context) {
 // Serve will start a new REST API server and listen for requests. This
 // will block until either: an error occurs, the context is canceled, or
 // a SIGTERM or SIGKILL signal is sent.
-func (rt *Runtime) Serve(ctx context.Context) error {
+func (rt *Runtime) Serve(ctx context.Context) (err error) {
 	if rt.Params.Addrs == nil {
 		return errors.New("at least one address must be configured in runtime parameters")
 	}
@@ -636,24 +649,19 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 
 	checkUserPrivileges(rt.logger)
 
-	// NOTE(tsandall): at some point, hopefully we can remove this because the
-	// Go runtime will just do the right thing. Until then, try to set
-	// GOMAXPROCS based on the CPU quota applied to the process.
-	undo, err := maxprocs.Set(maxprocs.Logger(func(f string, a ...any) {
-		rt.logger.Debug(f, a...)
-	}))
-	if err != nil {
-		rt.logger.WithFields(map[string]any{"err": err}).Debug("Failed to set GOMAXPROCS from CPU quota.")
-	}
-
-	defer undo()
-
 	if err := rt.Manager.Start(ctx); err != nil {
 		rt.logger.WithFields(map[string]any{"err": err}).Error("Failed to start plugins.")
 		return err
 	}
 
 	defer rt.Manager.Stop(ctx)
+
+	// Resolve the buffered logger: flush to logger plugin if configured,
+	// otherwise fall back to the standard logger.
+	stdLogger := logging.New()
+	stdLogger.SetLevel(rt.logger.GetLevel())
+	stdLogger.SetFormatter(internal_logging.GetFormatter(rt.Params.Logging.Format, rt.Params.Logging.TimestampFormat))
+	rt.logger = rt.Manager.ResolveBufferedLogger(stdLogger)
 
 	if rt.traceExporter != nil {
 		if err := rt.traceExporter.Start(ctx); err != nil {
@@ -964,7 +972,7 @@ func (rt *Runtime) readWatcher(ctx context.Context, watcher *fsnotify.Watcher, p
 }
 
 func (rt *Runtime) processWatcherUpdate(ctx context.Context, paths []string, removed string) error {
-	return pathwatcher.ProcessWatcherUpdateForRegoVersion(ctx, rt.Manager.ParserOptions().RegoVersion, paths, removed, rt.Store, rt.Params.Filter, rt.Params.BundleMode, rt.Params.BundleLazyLoadingMode, func(ctx context.Context, txn storage.Transaction, loaded *initload.LoadPathsResult) error {
+	return pathwatcher.ProcessWatcherUpdateForRegoVersion(ctx, rt.Manager.ParserOptions(), paths, removed, rt.Store, rt.Params.Filter, rt.Params.BundleMode, rt.Params.BundleLazyLoadingMode, func(ctx context.Context, txn storage.Transaction, loaded *initload.LoadPathsResult) error {
 		_, err := initload.InsertAndCompile(ctx, initload.InsertAndCompileOptions{
 			Store:         rt.Store,
 			Txn:           txn,
@@ -1006,6 +1014,12 @@ func (rt *Runtime) gracefulServerShutdown(s *server.Server) error {
 		err = rt.traceExporter.Shutdown(ctx)
 		if err != nil {
 			rt.logger.WithFields(map[string]any{"err": err}).Error("Failed to shutdown OpenTelemetry trace exporter gracefully.")
+		}
+	}
+
+	if rt.meterProvider != nil {
+		if err := rt.meterProvider.Shutdown(ctx); err != nil {
+			rt.logger.WithFields(map[string]any{"err": err}).Error("Failed to shutdown OpenTelemetry meter provider gracefully.")
 		}
 	}
 
@@ -1108,6 +1122,12 @@ func generateDecisionID() string {
 	return id
 }
 
+func init() {
+	registeredPlugins = map[string]plugins.Factory{
+		filelogger.Name: &filelogger.Factory{},
+	}
+}
+
 func verifyAuthorizationPolicySchema(m *plugins.Manager) error {
 	authorizationDecisionRef, err := ref.ParseDataPath(*m.GetConfig().DefaultAuthorizationDecision)
 	if err != nil {
@@ -1115,8 +1135,4 @@ func verifyAuthorizationPolicySchema(m *plugins.Manager) error {
 	}
 
 	return compiler.VerifyAuthorizationPolicySchema(m.GetCompiler(), authorizationDecisionRef)
-}
-
-func init() {
-	registeredPlugins = make(map[string]plugins.Factory)
 }
