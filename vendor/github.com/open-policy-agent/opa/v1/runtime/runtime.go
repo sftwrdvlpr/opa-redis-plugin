@@ -210,6 +210,10 @@ type Params struct {
 	// is mostly for test purposes.
 	Output io.Writer
 
+	// ConsoleInput is the reader the interactive shell reads query input from.
+	// When nil, os.Stdin is used. Mostly for tests and non-terminal hosts.
+	ConsoleInput io.Reader
+
 	// GracefulShutdownPeriod is the time (in seconds) to wait for the http
 	// server to shutdown gracefully.
 	GracefulShutdownPeriod int
@@ -533,6 +537,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 		return nil, fmt.Errorf("config error: %w", err)
 	}
 
+	// Surface non-fatal config warnings (e.g. unrecognized options).
+	for _, w := range manager.Config.Warnings {
+		logger.Warn(w)
+	}
+
 	if err := manager.Init(ctx); err != nil {
 		return nil, fmt.Errorf("initialization error: %w", err)
 	}
@@ -841,6 +850,7 @@ func (rt *Runtime) StartREPL(ctx context.Context) error {
 		WithRuntime(rt.Manager.Info).
 		WithRegoVersion(rt.Params.regoVersion()).
 		WithInitBundles(rt.loadedPathsResult.Bundles).
+		WithConsoleInput(rt.Params.ConsoleInput).
 		WithStderrWriter(rt.Params.Output)
 
 	if rt.Params.Watch {

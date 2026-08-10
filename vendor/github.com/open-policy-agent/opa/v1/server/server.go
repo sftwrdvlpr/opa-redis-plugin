@@ -659,8 +659,9 @@ func (s *Server) getListener(addr string, h http.Handler, t httpListenerType) ([
 
 func (s *Server) getListenerForHTTPServer(u *url.URL, h http.Handler, t httpListenerType) (Loop, httpListener, error) {
 	h1s := http.Server{
-		Addr:    u.Host,
-		Handler: h,
+		Addr:              u.Host,
+		Handler:           h,
+		ReadHeaderTimeout: 32 * time.Second,
 	}
 	if s.h2cEnabled {
 		p := new(http.Protocols)
@@ -712,9 +713,10 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL, h http.Handler, t httpLis
 	}
 
 	httpsServer := http.Server{
-		Addr:      u.Host,
-		Handler:   h,
-		TLSConfig: &tlsConfig,
+		Addr:              u.Host,
+		Handler:           h,
+		TLSConfig:         &tlsConfig,
+		ReadHeaderTimeout: 32 * time.Second,
 	}
 
 	l := newHTTPListener(&httpsServer, t)
@@ -739,7 +741,10 @@ func (s *Server) getListenerForUNIXSocket(u *url.URL, h http.Handler, t httpList
 		os.Remove(socketPath)
 	}
 
-	domainSocketServer := http.Server{Handler: h}
+	domainSocketServer := http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 32 * time.Second,
+	}
 	if s.h2cEnabled {
 		p := new(http.Protocols)
 		p.SetHTTP1(true)
@@ -2847,9 +2852,10 @@ func stringPathToRef(s string) (ast.Ref, error) {
 			return nil, fmt.Errorf("invalid ref term '%s'", x)
 		}
 
-		i, err := strconv.Atoi(x)
-		if err != nil {
-			r = append(r, ast.StringTerm(x))
+		// Note(anders): the branches look identical, but the difference
+		// in type decides where we go to look for an interned term
+		if i, ok := util.Atoi64(x); !ok {
+			r = append(r, ast.InternedTerm(x))
 		} else {
 			r = append(r, ast.InternedTerm(i))
 		}
