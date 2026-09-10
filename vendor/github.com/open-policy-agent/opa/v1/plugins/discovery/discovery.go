@@ -129,7 +129,7 @@ func New(manager *plugins.Manager, opts ...func(*Discovery)) (*Discovery, error)
 	result.config = config
 	restClient := manager.Client(config.service)
 	if strings.ToLower(restClient.Config().Type) == "oci" {
-		ociStorePath := filepath.Join(os.TempDir(), "opa", "oci") // use temporary folder /tmp/opa/oci
+		ociStorePath := ""
 		if managerConfig.PersistenceDirectory != nil {
 			ociStorePath = filepath.Join(*managerConfig.PersistenceDirectory, "oci")
 		}
@@ -391,7 +391,7 @@ func (c *Discovery) processUpdate(ctx context.Context, u download.Update) {
 		// include the local overrides in the status update
 		if len(c.overriddenConfigKeys) != 0 {
 			msg := fmt.Sprintf("Keys in the discovered configuration overridden by boot configuration: %v", strings.Join(c.overriddenConfigKeys, ", "))
-			c.logger.Debug(msg)
+			c.logger.Debug("%s", msg)
 			c.status.Message = msg
 		}
 		c.overriddenConfigKeys = nil
@@ -485,7 +485,7 @@ func (c *Discovery) processBundle(ctx context.Context, b *bundleApi.Bundle) (*pl
 	// Surface configuration warnings (e.g. unrecognized options) for the
 	// discovered configuration, mirroring what the runtime does at boot.
 	for _, w := range config.Warnings {
-		c.logger.Warn(w)
+		c.logger.Warn("%s", w)
 	}
 
 	// Note: We don't currently support changes to the discovery
@@ -786,7 +786,7 @@ func mergeValuesAndListOverrides(dest map[string]any, src map[string]any, prefix
 
 		fullKey := k
 		if prefix != "" {
-			fullKey = fmt.Sprintf("%v.%v", prefix, k)
+			fullKey = prefix + "." + k
 		}
 
 		nextMap, ok := v.(map[string]any)

@@ -26,13 +26,12 @@ var jsonFields = map[reflect.Type]map[string]bool{}
 // UnmarshalExtras and MarshalExtras can distinguish known fields from extras.
 // Call from an init() function in the package that defines T.
 func RegisterJSONFields[T any]() {
-	t := reflect.TypeOf((*T)(nil)).Elem()
+	t := reflect.TypeFor[T]()
 	if t.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("types: RegisterJSONFields[%s]: not a struct", t))
 	}
 	f := make(map[string]bool, t.NumField())
-	for i := range t.NumField() {
-		sf := t.Field(i)
+	for sf := range t.Fields() {
 		tag := sf.Tag.Get("json")
 		if tag == "-" {
 			continue
@@ -47,7 +46,7 @@ func RegisterJSONFields[T any]() {
 }
 
 func knownJSONFields[T any]() map[string]bool {
-	t := reflect.TypeOf((*T)(nil)).Elem()
+	t := reflect.TypeFor[T]()
 	f, ok := jsonFields[t]
 	if !ok {
 		panic(fmt.Sprintf("types: %s not registered with RegisterJSONFields", t))
