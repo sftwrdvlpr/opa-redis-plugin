@@ -56,7 +56,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Download all binaries
         uses: actions/download-artifact@v6
