@@ -384,8 +384,8 @@ access.
 	addTargetFlag(evalCommand.Flags(), params.target)
 	addCountFlag(evalCommand.Flags(), &params.count, "benchmark")
 	addStrictFlag(evalCommand.Flags(), &params.strict, false)
-	addV0CompatibleFlag(evalCommand.Flags(), &params.v0Compatible, false)
-	addV1CompatibleFlag(evalCommand.Flags(), &params.v1Compatible, false)
+	addV0CompatibleFlag(evalCommand.Flags(), &params.v0Compatible)
+	addV1CompatibleFlag(evalCommand.Flags(), &params.v1Compatible)
 	addReadAstValuesFromStoreFlag(evalCommand.Flags(), &params.ReadAstValuesFromStore, false)
 
 	root.AddCommand(evalCommand)
@@ -755,6 +755,10 @@ func setupEval(args []string, params evalCommandParams) (*evalContext, error) {
 			return nil, errors.New("cannot use --show-builtin-errors with --strict-builtin-errors, --strict-builtin-errors will return the first built-in error encountered immediately")
 		}
 	}
+
+	// Always on: a traceback only shows up on an error, and it is the one place
+	// the CLI explains how evaluation reached the failing expression.
+	regoArgs = append(regoArgs, rego.StackTraces(true))
 
 	var builtInErrors []topdown.Error
 	if params.showBuiltinErrors {

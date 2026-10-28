@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/olekukonko/tablewriter/pkg/twwidth"
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"golang.org/x/text/cases"
@@ -32,6 +31,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/storage"
 	"github.com/open-policy-agent/opa/v1/topdown"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 var (
@@ -153,10 +153,11 @@ func NewOutputErrors(err error) []OutputError {
 
 		case *topdown.Error:
 			errs = []OutputError{{
-				Code:     typedErr.Code,
-				Message:  typedErr.Message,
-				Location: typedErr.Location,
-				err:      typedErr,
+				Code:       typedErr.Code,
+				Message:    typedErr.Message,
+				Location:   typedErr.Location,
+				StackTrace: typedErr.StackTrace,
+				err:        typedErr,
 			}}
 		case *storage.Error:
 			errs = []OutputError{{
@@ -235,6 +236,9 @@ func (e OutputErrors) Error() string {
 		if l, ok := err.Details.(string); ok {
 			s = append(s, l)
 		}
+		if len(err.StackTrace) > 0 {
+			s = append(s, "\nTraceback:\n"+err.StackTrace.String())
+		}
 	}
 
 	return prefix + strings.Join(s, "\n")
@@ -248,7 +252,9 @@ type OutputError struct {
 	Code     string        `json:"code,omitempty"`
 	Location *ast.Location `json:"location,omitempty"`
 	Details  any           `json:"details,omitempty"`
-	err      error
+	// StackTrace is set for topdown errors when stack traces are enabled.
+	StackTrace topdown.StackTrace `json:"stack_trace,omitempty"`
+	err        error
 }
 
 func (j OutputError) Error() string {
@@ -303,6 +309,8 @@ func Pretty(w io.Writer, errW io.Writer, r Output) error {
 
 type PrettyOptions struct {
 	TraceOpts topdown.PrettyTraceOptions
+	// UndefinedPrintsEmpty causes undefined results to be printed as empty instead of "undefined", when true.
+	UndefinedPrintsEmpty bool
 }
 
 // PrettyWithOptions prints all of r to w in a human-readable format, errors are written to errW
@@ -317,7 +325,11 @@ func PrettyWithOptions(w io.Writer, errW io.Writer, r Output, opts PrettyOptions
 			return err
 		}
 	} else if r.undefined() {
-		fmt.Fprintln(w, "undefined")
+		if opts.UndefinedPrintsEmpty {
+			fmt.Fprintln(w)
+		} else {
+			fmt.Fprintln(w, "undefined")
+		}
 	} else if r.Result != nil {
 		if err := prettyResult(w, r.Result, r.limit); err != nil {
 			return err
@@ -477,7 +489,7 @@ func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
 	)
 
 	for i := range pq.Queries {
-		f, _, err := prettyASTNode(pq.Queries[i], ast.DefaultRegoVersion)
+		f, err := prettyASTNode(pq.Queries[i], ast.DefaultRegoVersion)
 		if err != nil {
 			return err
 		}
@@ -487,7 +499,7 @@ func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
 	}
 
 	for i, s := range pq.Support {
-		f, _, err := prettyASTNode(s, s.RegoVersion())
+		f, err := prettyASTNode(s, s.RegoVersion())
 		if err != nil {
 			return err
 		}
@@ -500,19 +512,13 @@ func prettyPartial(w io.Writer, pq *rego.PartialQueries) error {
 }
 
 // prettyASTNode is used for pretty-printing the result of partial eval
-func prettyASTNode(x any, regoVersion ast.RegoVersion) (string, int, error) {
+func prettyASTNode(x any, regoVersion ast.RegoVersion) (string, error) {
 	bs, err := format.AstWithOpts(x, format.Opts{IgnoreLocations: true, RegoVersion: regoVersion})
 	if err != nil {
-		return "", 0, fmt.Errorf("format error: %w", err)
+		return "", fmt.Errorf("format error: %w", err)
 	}
-	var maxLineWidth int
-	s := strings.Trim(strings.ReplaceAll(string(bs), "\t", "  "), "\n")
-	for line := range strings.SplitSeq(s, "\n") {
-		if width := twwidth.Width(line); width > maxLineWidth {
-			maxLineWidth = width
-		}
-	}
-	return s, maxLineWidth, nil
+
+	return strings.Trim(strings.ReplaceAll(string(bs), "\t", "  "), "\n"), nil
 }
 
 func prettyMetrics(w io.Writer, m metrics.Metrics, limit int) error {
@@ -650,11 +656,7 @@ func printPrettyRow(table *tablewriter.Table, keys []resultKey, result rego.Resu
 		buf = append(buf, checkStrLimit(string(js), prettyLimit))
 	}
 
-	cells := make([]any, len(buf))
-	for i, s := range buf {
-		cells[i] = s
-	}
-	_ = table.Append(cells...)
+	_ = table.Append(util.ToSliceOf[any](buf)...)
 }
 
 func generateTableMetrics(writer io.Writer) *tablewriter.Table {
