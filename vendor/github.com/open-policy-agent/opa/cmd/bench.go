@@ -349,7 +349,7 @@ func benchE2E(ctx context.Context, args []string, params benchmarkCommandParams,
 			return err
 		}
 	case <-initChannel:
-		break
+		break //nolint:revive // NOTE(anders): not sure about this
 	}
 
 	// Busy loop until server has truly come online to recover the bound port.
@@ -418,7 +418,7 @@ func benchE2E(ctx context.Context, args []string, params benchmarkCommandParams,
 		}
 	}
 
-	url := fmt.Sprintf("http://%s:%d/v1/%v", host, port, path)
+	url := fmt.Sprintf("http://%s:%d/v1/%v", host, port, path) //nolint:revive
 	if params.metrics {
 		url += "?metrics=true"
 	}
@@ -594,7 +594,7 @@ func readQuery(params benchmarkCommandParams, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		query = string(bs)
+		query = util.ByteSliceToString(bs)
 	} else {
 		query = args[0]
 	}
