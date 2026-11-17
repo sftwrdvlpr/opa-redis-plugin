@@ -15,3 +15,5 @@
 # vendor/
 opa_redis*
 config.yaml
+.idea
+
